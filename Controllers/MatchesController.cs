@@ -61,6 +61,17 @@ public class MatchesController : ControllerBase
                 return BadRequest($"Extra time half length ({request.ExtraTimeMinutesPerHalf} min) can't exceed the regulation half length ({request.MinutesPerHalf} min).");
         }
 
+        var minPlayers = request.MinPlayersPerSide ?? 1;
+        if (minPlayers < 1)
+            return BadRequest("Minimum players per side must be at least 1.");
+        if (minPlayers > request.MaxPlayersPerSide)
+            return BadRequest($"Minimum players per side ({minPlayers}) can't exceed players per side ({request.MaxPlayersPerSide}).");
+
+        var teamIds = new[] { match.HomeTeamId, match.AwayTeamId };
+        if (request.Squad.Any(s => !teamIds.Contains(s.TeamId)))
+            return BadRequest("Every squad entry must belong to one of the two teams in this match.");
+        if (request.Squad.GroupBy(s => s.PlayerId).Any(g => g.Count() > 1))
+            return BadRequest("A player can only appear once in the squad selection.");
 
         var homeStarting = request.Squad.Count(s => s.TeamId == match.HomeTeamId && s.SquadStatus == SquadStatus.Starting);
         var awayStarting = request.Squad.Count(s => s.TeamId == match.AwayTeamId && s.SquadStatus == SquadStatus.Starting);
@@ -68,6 +79,7 @@ public class MatchesController : ControllerBase
             return BadRequest($"Each team must have exactly {request.MaxPlayersPerSide} starting players selected.");
 
         match.MaxPlayersPerSide = request.MaxPlayersPerSide;
+        match.MinPlayersPerSide = minPlayers;
         match.MinutesPerHalf = request.MinutesPerHalf;
         match.ExtraTimeAllowed = request.ExtraTimeAllowed;
         match.DrawAllowed = request.DrawAllowed;
@@ -78,15 +90,19 @@ public class MatchesController : ControllerBase
         {
             PlayerId = s.PlayerId,
             TeamId = s.TeamId,
-            SquadStatus = s.SquadStatus
+            SquadStatus = s.SquadStatus,
+            StartedMatch = s.SquadStatus == SquadStatus.Starting
         }).ToList();
 
         match.Status = MatchStatus.InProgress;
+        match.PeriodState = PeriodState.InPlay;
         match.StartedAt = DateTime.UtcNow;
         match.CurrentMinute = 0;
         match.CurrentHalf = 1;
         match.IsClockRunning = true;
         match.HalfStartedAt = DateTime.UtcNow;
+
+        _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.HalfStart, MinuteOfMatch = 0 });
 
         await _db.SaveChangesAsync();
         return Ok(new { matchId = match.Id, status = match.Status.ToString() });
@@ -100,7 +116,20 @@ public class MatchesController : ControllerBase
         if (match == null) return NotFound("Match not found.");
 
         if (match.Status != MatchStatus.InProgress && match.Status != MatchStatus.Paused)
-            return BadRequest("This match isn't currently active.");        
+            return BadRequest("This match isn't currently active.");
+
+        // Clock/period bookkeeping is driven by the dedicated endpoints, not by posting raw events.
+        if (request.EventType is MatchEventType.HalfStart or MatchEventType.HalfEnd
+            or MatchEventType.ClockPaused or MatchEventType.ClockResumed
+            or MatchEventType.ExtraTimeStart or MatchEventType.ExtraTimeAdded
+            or MatchEventType.MatchCompleted or MatchEventType.MatchAbandoned
+            or MatchEventType.PenaltyShootoutStarted or MatchEventType.PenaltyKick)
+            return BadRequest($"{request.EventType} is recorded automatically — use the matching clock, period or penalty action instead.");
+
+        // The ball is out of play between periods: goals can't happen at half time, but
+        // substitutions and disciplinary action legitimately do.
+        if (match.PeriodState == PeriodState.Ended && request.EventType == MatchEventType.Goal)
+            return BadRequest($"{Match.PeriodLabel(match.CurrentHalf)} has ended — a goal can't be scored while the ball is out of play. Start the next period first.");
 
         if (request.EventType == MatchEventType.RedCard)
         {
@@ -205,6 +234,26 @@ public class MatchesController : ControllerBase
             incoming.SquadStatus = SquadStatus.Starting;
         }
 
+        if (request.EventType == MatchEventType.Goal)
+        {
+            if (request.TeamId == null)
+                return BadRequest("A goal requires a team.");
+            if (request.TeamId != match.HomeTeamId && request.TeamId != match.AwayTeamId)
+                return BadRequest("A goal must be credited to one of the two teams in this match.");
+
+            // The assist is optional, but when given it has to be a team-mate who was on the pitch.
+            if (request.RelatedPlayerId != null)
+            {
+                if (request.RelatedPlayerId == request.PlayerId)
+                    return BadRequest("A player can't assist their own goal.");
+
+                var assister = await _db.MatchPlayers.FirstOrDefaultAsync(mp => mp.MatchId == id && mp.PlayerId == request.RelatedPlayerId);
+                if (assister == null) return BadRequest("The assisting player isn't part of this match's squad.");
+                if (assister.TeamId != request.TeamId) return BadRequest("The assist must come from a team-mate of the scorer.");
+                if (assister.SquadStatus != SquadStatus.Starting) return BadRequest("Only a player on the pitch can be credited with the assist.");
+            }
+        }
+
         var (baseMinute, stoppageMinute) = CalculateMinuteBreakdown(match);
         var evt = new MatchEvent
         {
@@ -254,43 +303,45 @@ public class MatchesController : ControllerBase
         return Ok(events);
     }
 
-    // POST api/matches/5/clock/pause
+    // POST api/matches/5/clock/pause — stop play mid-period (injury, incident). The period is NOT over.
     [HttpPost("{id}/clock/pause")]
     public async Task<ActionResult<object>> PauseClock(int id)
     {
         var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound();
         if (match.Status != MatchStatus.InProgress) return BadRequest("Match isn't in progress.");
+        if (match.PeriodState == PeriodState.Ended)
+            return BadRequest($"{Match.PeriodLabel(match.CurrentHalf)} has already ended — there is no clock to stop.");
 
         match.Status = MatchStatus.Paused;
+        match.PeriodState = PeriodState.Stopped;
         match.IsClockRunning = false;
         match.PausedAt = DateTime.UtcNow;
         var (baseMinute, stoppageMinute) = CalculateMinuteBreakdown(match);
         _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.ClockPaused, MinuteOfMatch = baseMinute, StoppageMinute = stoppageMinute });
         await _db.SaveChangesAsync();
-        return Ok(new { match.Status, minuteOfMatch = CalculateMinuteBreakdown(match) });
+        return Ok(new { match.Status, periodState = match.PeriodState.ToString(), minuteOfMatch = CalculateMinuteBreakdown(match) });
     }
 
-    // POST api/matches/5/clock/resume
+    // POST api/matches/5/clock/resume — restart play after a mid-period stoppage.
     [HttpPost("{id}/clock/resume")]
     public async Task<ActionResult<object>> ResumeClock(int id)
     {
         var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound();
         if (match.Status != MatchStatus.Paused) return BadRequest("Match isn't paused.");
+        if (match.PeriodState == PeriodState.Ended)
+            return BadRequest($"{Match.PeriodLabel(match.CurrentHalf)} has ended — start the next period instead of resuming this one.");
 
-        if (match.PausedAt.HasValue)
-        {
-            match.PausedDurationMs += (long)(DateTime.UtcNow - match.PausedAt.Value).TotalMilliseconds;
-            match.PausedAt = null;
-        }
+        ClearActivePause(match);
 
         match.Status = MatchStatus.InProgress;
+        match.PeriodState = PeriodState.InPlay;
         match.IsClockRunning = true;
         var (baseMinute, stoppageMinute) = CalculateMinuteBreakdown(match);
         _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.ClockResumed, MinuteOfMatch = baseMinute, StoppageMinute = stoppageMinute });
         await _db.SaveChangesAsync();
-        return Ok(new { match.Status, minuteOfMatch = CalculateMinuteBreakdown(match) });
+        return Ok(new { match.Status, periodState = match.PeriodState.ToString(), minuteOfMatch = CalculateMinuteBreakdown(match) });
     }
 
     // POST api/matches/5/clock/add-time
@@ -300,16 +351,19 @@ public class MatchesController : ControllerBase
         var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound();
         if (request.Minutes < 1) return BadRequest("Minutes must be at least 1.");
+        if (!match.IsLiveOrPaused)
+            return BadRequest("Stoppage time can only be added to a match that is under way.");
+        if (match.PeriodState == PeriodState.Ended)
+            return BadRequest($"{Match.PeriodLabel(match.CurrentHalf)} has already ended — stoppage time can't be added to a finished period.");
 
-        var halfLength = GetHalfLengthMinutes(match, match.CurrentHalf);
-        var maxAllowed = (int)Math.Ceiling(halfLength * 0.5);
-        var remaining = maxAllowed - match.ExtraMinutesAddedThisHalf;
+        var maxAllowed = match.MaxStoppageThisPeriod;
+        var remaining = match.StoppageRemainingThisPeriod;
 
         if (remaining <= 0)
-            return BadRequest($"Maximum stoppage time for this half ({maxAllowed} min) has already been added.");
+            return BadRequest($"Maximum stoppage time for this period ({maxAllowed} min) has already been added.");
 
         if (request.Minutes > remaining)
-            return BadRequest($"You can add at most {remaining} more minute(s) this half (cap is 50% of the half length: {maxAllowed} min).");
+            return BadRequest($"You can add at most {remaining} more minute(s) this period (cap is 50% of the period length: {maxAllowed} min).");
 
         match.ExtraMinutesAddedThisHalf += request.Minutes;
         var (baseMinute, stoppageMinute) = CalculateMinuteBreakdown(match);
@@ -320,65 +374,154 @@ public class MatchesController : ControllerBase
         {
             addedMinutes = request.Minutes,
             minuteOfMatch = CalculateMinuteBreakdown(match),
-            remainingAllowance = maxAllowed - match.ExtraMinutesAddedThisHalf,
+            remainingAllowance = match.StoppageRemainingThisPeriod,
             maxAllowedThisHalf = maxAllowed
         });
     }
 
-    // POST api/matches/5/half/next — ends current half, starts the next
+    // POST api/matches/5/half/end — the referee's whistle for the end of the current period.
+    // Ending here is always allowed (a period can be cut short), but it never starts the next one:
+    // that keeps "half time" and "full time" distinguishable, which is what gates the shootout.
+    [HttpPost("{id}/half/end")]
+    public async Task<ActionResult<object>> EndPeriod(int id)
+    {
+        var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound();
+        if (!match.IsLiveOrPaused)
+            return BadRequest("Only a match that is under way has a period to end.");
+        if (match.PeriodState == PeriodState.Ended)
+            return BadRequest($"{Match.PeriodLabel(match.CurrentHalf)} has already ended.");
+
+        var (baseMinute, stoppageMinute) = CalculateMinuteBreakdown(match);
+
+        // Freeze the clock where the whistle went, so the elapsed time stops climbing.
+        ClearActivePause(match);
+        match.PeriodState = PeriodState.Ended;
+        match.Status = MatchStatus.Paused;
+        match.IsClockRunning = false;
+        match.PausedAt = DateTime.UtcNow;
+        match.FinalWhistleMinute = baseMinute;
+
+        _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.HalfEnd, MinuteOfMatch = baseMinute, StoppageMinute = stoppageMinute });
+
+        await _db.SaveChangesAsync();
+        return Ok(new
+        {
+            match.CurrentHalf,
+            periodState = match.PeriodState.ToString(),
+            match.Status,
+            isFinalPeriod = match.IsFinalPeriod,
+            nextPeriodLabel = match.NextPeriodLabel,
+            canStartNextPeriod = match.CanStartNextPeriod,
+            canStartPenalties = match.CanStartPenalties,
+            canCompleteNormally = match.CanCompleteNormally
+        });
+    }
+
+    // POST api/matches/5/half/next — kick off the next period. Requires the current one to be ended.
     [HttpPost("{id}/half/next")]
     public async Task<ActionResult<object>> NextHalf(int id)
     {
         var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound();
+        if (!match.IsLiveOrPaused)
+            return BadRequest("This match isn't currently active.");
 
-        // Cap halves: normal match = 2, with extra time allowed = up to 4 (regulation + 2 ET halves)
-        int maxHalves;
-        if (match.CurrentHalf <= 2)
-        {
-            bool scoresLevel = match.HomeScore == match.AwayScore;
-            bool extraTimeApplicable = match.ExtraTimeAllowed && !match.DrawAllowed && scoresLevel;
-            maxHalves = extraTimeApplicable ? 4 : 2;
-        }
-        else
-        {
-            maxHalves = 4; // already in extra time, allow up to ET2
-        }
-        if (match.CurrentHalf >= maxHalves)
-            return BadRequest($"This match already has the maximum number of halves ({maxHalves}). End the match instead.");
+        if (match.PeriodState != PeriodState.Ended)
+            return BadRequest($"{Match.PeriodLabel(match.CurrentHalf)} is still being played — end it first, then kick off the next period.");
 
-        var (baseMinute, stoppageMinute) = CalculateMinuteBreakdown(match);
-        _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.HalfEnd, MinuteOfMatch = baseMinute, StoppageMinute = stoppageMinute });
+        var maxPeriods = match.MaxPeriods;
+        if (match.CurrentHalf >= maxPeriods)
+        {
+            return BadRequest(match.ExtraTimeAllowed && !match.DrawAllowed && !match.ScoresLevel
+                ? $"{match.HomeTeamName} {match.HomeScore}-{match.AwayScore} {match.AwayTeamName} is decided — extra time only applies when the scores are level. End the match instead."
+                : $"This match has played all {maxPeriods} of its periods. End the match instead.");
+        }
+
+        var enteringExtraTime = match.CurrentHalf == 2;
 
         match.CurrentHalf++;
-        match.Status = MatchStatus.Paused;
-        match.IsClockRunning = false;
-        match.PausedAt = DateTime.UtcNow;      // clock paused until Resume kicks off the new half
-        match.PausedDurationMs = 0;            // fresh pause tracking for the new half
-        match.HalfStartedAt = DateTime.UtcNow; // fresh elapsed-time baseline for the new half
-        match.ExtraMinutesAddedThisHalf = 0;   // fresh stoppage allowance for the new half
+        match.Status = MatchStatus.InProgress;
+        match.PeriodState = PeriodState.InPlay;
+        match.IsClockRunning = true;
+        match.PausedAt = null;                 // the new period starts running immediately
+        match.PausedDurationMs = 0;            // fresh pause tracking for the new period
+        match.HalfStartedAt = DateTime.UtcNow; // fresh elapsed-time baseline for the new period
+        match.ExtraMinutesAddedThisHalf = 0;   // fresh stoppage allowance for the new period
+        match.FinalWhistleMinute = null;
 
-        _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.HalfStart, MinuteOfMatch = baseMinute, StoppageMinute = stoppageMinute });
+        var startMinute = match.PriorPeriodsMinutes;
+        if (enteringExtraTime)
+            _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.ExtraTimeStart, MinuteOfMatch = startMinute });
+        _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.HalfStart, MinuteOfMatch = startMinute });
 
         await _db.SaveChangesAsync();
-        return Ok(new { match.CurrentHalf, match.Status, maxHalves });
+        return Ok(new
+        {
+            match.CurrentHalf,
+            periodState = match.PeriodState.ToString(),
+            match.Status,
+            maxHalves = maxPeriods,
+            periodLabel = match.CurrentPeriodLabel,
+            periodMinutes = match.CurrentPeriodMinutes
+        });
     }
 
     // POST api/matches/5/complete
     [HttpPost("{id}/complete")]
-    public async Task<ActionResult<object>> CompleteMatch(int id)
+    public async Task<ActionResult<object>> CompleteMatch(int id, [FromBody] CompleteMatchRequest? request = null)
     {
         var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound();
 
+        if (match.Status == MatchStatus.Completed)
+            return BadRequest("This match has already been completed.");
+        if (match.Status == MatchStatus.NotStarted)
+            return BadRequest("This match hasn't kicked off yet.");
+        if (match.Status == MatchStatus.PenaltyShootout)
+            return BadRequest("A penalty shootout is in progress — finish or decide the shootout instead.");
+
+        var force = request?.Force ?? false;
+
+        if (!force)
+        {
+            if (match.PeriodState != PeriodState.Ended)
+                return BadRequest($"{Match.PeriodLabel(match.CurrentHalf)} is still being played — end the period first.");
+
+            if (match.CurrentHalf < match.MaxPeriods)
+                return BadRequest($"{match.NextPeriodLabel} still has to be played. Kick it off, or force-complete to abandon the match.");
+
+            if (match.ScoresLevel && !match.DrawAllowed)
+                return BadRequest("Draws aren't allowed in this match and the scores are level — take it to a penalty shootout, or force-complete to abandon it.");
+        }
+
+        if (request?.AwardWinnerTeamId is int winner)
+        {
+            if (winner != match.HomeTeamId && winner != match.AwayTeamId)
+                return BadRequest("The awarded winner must be one of the two teams in this match.");
+            match.ForfeitWinnerTeamId = winner;
+        }
+
+        ClearActivePause(match);
         match.Status = MatchStatus.Completed;
+        match.PeriodState = PeriodState.Ended;
         match.CompletedAt = DateTime.UtcNow;
         match.IsClockRunning = false;
         var (baseMinute, stoppageMinute) = CalculateMinuteBreakdown(match);
-        _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.MatchCompleted, MinuteOfMatch = baseMinute, StoppageMinute = stoppageMinute });
+        match.FinalWhistleMinute ??= baseMinute;
+        _db.MatchEvents.Add(new MatchEvent
+        {
+            MatchId = id,
+            EventType = force && (match.ScoresLevel && !match.DrawAllowed || match.ForfeitWinnerTeamId.HasValue)
+                ? MatchEventType.MatchAbandoned
+                : MatchEventType.MatchCompleted,
+            MinuteOfMatch = baseMinute,
+            StoppageMinute = stoppageMinute,
+            TeamId = match.ForfeitWinnerTeamId
+        });
 
         await _db.SaveChangesAsync();
-        return Ok(new { match.Status, match.HomeScore, match.AwayScore });
+        return Ok(new { match.Status, match.HomeScore, match.AwayScore, match.ForfeitWinnerTeamId });
     }
 
     // POST api/matches/5/penalties/start
@@ -387,19 +530,39 @@ public class MatchesController : ControllerBase
     {
         var match = await _db.Matches.Include(m => m.MatchPlayers).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound();
-        if (match.Status != MatchStatus.Paused) return BadRequest("Match must be paused at the end of the final half to start penalties.");
-        if (match.HomeScore != match.AwayScore) return BadRequest("Penalties can only start when scores are level.");
+        if (!match.IsLiveOrPaused) return BadRequest("This match isn't currently active.");
         if (match.DrawAllowed) return BadRequest("This match allows draws — penalties aren't applicable.");
+        if (match.HomeScore != match.AwayScore) return BadRequest("Penalties can only start when scores are level.");
+
+        // The heart of the fix: a shootout needs the *final* period to have actually been ended.
+        // Merely being "paused" — which is also what half time and an injury stoppage look like —
+        // is not enough.
+        if (match.PeriodState != PeriodState.Ended)
+            return BadRequest($"{Match.PeriodLabel(match.CurrentHalf)} is still being played. End the period first, then take it to penalties.");
+
+        if (match.CurrentHalf < match.MaxPeriods)
+            return BadRequest($"{match.NextPeriodLabel} still has to be played before a shootout — kick it off, or end it early if you want to go straight to penalties.");
+
         if (request.TakersPerSide < 1) return BadRequest("Takers per side must be at least 1.");
 
+        // Both sides must be able to field the agreed number of takers ("reduce to equal numbers").
+        var homeEligible = GetEligiblePlayerIds(match, match.HomeTeamId ?? 0).Count;
+        var awayEligible = GetEligiblePlayerIds(match, match.AwayTeamId ?? 0).Count;
+        if (homeEligible == 0 || awayEligible == 0)
+            return BadRequest("Both teams need at least one player on the pitch to take penalties.");
+        var maxTakers = Math.Min(homeEligible, awayEligible);
+        if (request.TakersPerSide > maxTakers)
+            return BadRequest($"Only {maxTakers} taker(s) per side are available ({match.HomeTeamName}: {homeEligible} on the pitch, {match.AwayTeamName}: {awayEligible}).");
+
         var (baseMinute, _) = CalculateMinuteBreakdown(match);
-        match.FinalWhistleMinute = baseMinute;
+        match.FinalWhistleMinute ??= baseMinute;
 
         match.IsPenaltyShootout = true;
         match.PenaltyTakersPerSide = request.TakersPerSide;
         match.Status = MatchStatus.PenaltyShootout;
+        match.IsClockRunning = false;
 
-        _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.PenaltyShootoutStarted, MinuteOfMatch = baseMinute });
+        _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.PenaltyShootoutStarted, MinuteOfMatch = match.FinalWhistleMinute ?? baseMinute });
 
         await _db.SaveChangesAsync();
         return Ok(new { match.Status, match.PenaltyTakersPerSide });
@@ -423,6 +586,7 @@ public class MatchesController : ControllerBase
             outcome = status.Outcome,
             homeScore = status.HomeScored,
             awayScore = status.AwayScored,
+            nextTeamId = status.Outcome == "InProgress" ? GetNextTakingTeamId(match, kicks) : null,
             homeAvailableTakerIds = GetAvailableTakerIds(match, match.HomeTeamId ?? 0, kicks),
             awayAvailableTakerIds = GetAvailableTakerIds(match, match.AwayTeamId ?? 0, kicks)
         });
@@ -504,17 +668,15 @@ public class MatchesController : ControllerBase
         if (request.WinningTeamId != match.HomeTeamId && request.WinningTeamId != match.AwayTeamId)
             return BadRequest("Winning team must be one of the two teams in this match.");
 
+        var kicks = await _db.PenaltyKicks.Where(k => k.MatchId == id).ToListAsync();
+        var status = ComputeShootoutStatus(match, kicks);
+
         match.PenaltyWinnerTeamId = request.WinningTeamId;
+        match.PenaltyHomeScore = status.HomeScored;
+        match.PenaltyAwayScore = status.AwayScored;
         match.Status = MatchStatus.Completed;
         match.CompletedAt = DateTime.UtcNow;
         match.IsClockRunning = false;
-
-        var kicks = await _db.PenaltyKicks.Where(k => k.MatchId == id).ToListAsync();
-        var status = ComputeShootoutStatus(match, kicks);
-        match.PenaltyHomeScore = status.HomeScored;
-        match.PenaltyAwayScore = status.AwayScored;
-        match.PenaltyWinnerTeamId = request.WinningTeamId;
-        match.Status = MatchStatus.Completed;
 
         _db.MatchEvents.Add(new MatchEvent { MatchId = id, EventType = MatchEventType.MatchCompleted, MinuteOfMatch = match.FinalWhistleMinute ?? 0 });
 
@@ -556,39 +718,57 @@ public class MatchesController : ControllerBase
         return ("InProgress", totalHome, totalAway);
     }
 
-    private static int GetHalfLengthMinutes(Match match, int halfNumber)
+    /// <summary>
+    /// Folds an in-flight pause into the accumulated paused total. Called before any transition that
+    /// changes what "paused" means, so elapsed time never double-counts or jumps.
+    /// </summary>
+    private static void ClearActivePause(Match match)
     {
-        if (halfNumber <= 2) return match.MinutesPerHalf ?? 0;
-        return match.ExtraTimeMinutesPerHalf ?? match.MinutesPerHalf ?? 0;
+        if (!match.PausedAt.HasValue) return;
+        match.PausedDurationMs += (long)(DateTime.UtcNow - match.PausedAt.Value).TotalMilliseconds;
+        match.PausedAt = null;
     }
 
-    private static int GetPriorHalvesMinutes(Match match)
-    {
-        var total = 0;
-        for (var h = 1; h < match.CurrentHalf; h++)
-            total += GetHalfLengthMinutes(match, h);
-        return total;
-    }
     private static (int BaseMinute, int? StoppageMinute) CalculateMinuteBreakdown(Match match)
     {
         if (match.HalfStartedAt == null) return (0, null);
 
         var pausedMs = match.PausedDurationMs;
-        var activePauseMs = match.Status == MatchStatus.Paused && match.PausedAt.HasValue
+        var activePauseMs = match.PausedAt.HasValue
             ? (DateTime.UtcNow - match.PausedAt.Value).TotalMilliseconds
             : 0;
 
         var elapsedMs = (DateTime.UtcNow - match.HalfStartedAt.Value).TotalMilliseconds - pausedMs - activePauseMs;
         var elapsedMinutesThisHalf = Math.Max(0, (int)(elapsedMs / 60000));
 
-        var halfLength = GetHalfLengthMinutes(match, match.CurrentHalf);
-        var priorHalvesMinutes = GetPriorHalvesMinutes(match);
+        var halfLength = match.CurrentPeriodMinutes;
+        var priorHalvesMinutes = match.PriorPeriodsMinutes;
 
         if (elapsedMinutesThisHalf <= halfLength)
             return (priorHalvesMinutes + elapsedMinutesThisHalf, null);
 
         var stoppage = elapsedMinutesThisHalf - halfLength;
         return (priorHalvesMinutes + halfLength, stoppage);
+    }
+
+    /// <summary>
+    /// Which team is due to take the next kick. Sides alternate; when one has taken fewer kicks it is
+    /// their turn. Surfaced as guidance rather than a hard rule so a referee can correct an entry.
+    /// </summary>
+    private static int? GetNextTakingTeamId(Match match, List<PenaltyKick> kicks)
+    {
+        var homeId = match.HomeTeamId;
+        var awayId = match.AwayTeamId;
+        if (homeId == null || awayId == null) return null;
+
+        var homeKicks = kicks.Count(k => k.TeamId == homeId);
+        var awayKicks = kicks.Count(k => k.TeamId == awayId);
+        if (homeKicks != awayKicks) return homeKicks < awayKicks ? homeId : awayId;
+
+        // Level on kicks taken: whoever did not take the last one goes next, else home starts.
+        var last = kicks.OrderBy(k => k.CreatedAt).ThenBy(k => k.Id).LastOrDefault();
+        if (last == null) return homeId;
+        return last.TeamId == homeId ? awayId : homeId;
     }
     private static List<int> GetEligiblePlayerIds(Match match, int teamId)
     {
@@ -614,24 +794,39 @@ public class MatchesController : ControllerBase
 
         return eligible.Where(pid => !usedThisCycle.Contains(pid)).ToList();
     }
+    /// <summary>
+    /// Abandons the match when send-offs take a side below the agreed minimum (IFAB Law 3 — the
+    /// threshold is configurable so small-sided local games can set their own).
+    /// </summary>
     private async Task<bool> CheckAndHandleTeamDepleted(Match match, int teamId)
     {
-        var remainingOnPitch = await _db.MatchPlayers.CountAsync(mp =>
-            mp.MatchId == match.Id && mp.TeamId == teamId && mp.SquadStatus == SquadStatus.Starting);
+        // Materialise the squad rather than counting in the database: the send-off that triggered
+        // this check is still an unsaved change, so a COUNT(*) would see the player as on the pitch
+        // and the match would never be abandoned.
+        var squad = await _db.MatchPlayers
+            .Where(mp => mp.MatchId == match.Id && mp.TeamId == teamId)
+            .ToListAsync();
+        var remainingOnPitch = squad.Count(mp => mp.SquadStatus == SquadStatus.Starting);
 
-        if (remainingOnPitch > 0) return false;
+        var minimum = Math.Max(1, match.MinPlayersPerSide ?? 1);
+        if (remainingOnPitch >= minimum) return false;
 
         var opponentTeamId = teamId == match.HomeTeamId ? match.AwayTeamId : match.HomeTeamId;
+        var minuteNow = CalculateMinuteBreakdown(match).BaseMinute;
+
+        ClearActivePause(match);
         match.ForfeitWinnerTeamId = opponentTeamId;
         match.Status = MatchStatus.Completed;
+        match.PeriodState = PeriodState.Ended;
         match.CompletedAt = DateTime.UtcNow;
         match.IsClockRunning = false;
+        match.FinalWhistleMinute ??= minuteNow;
 
         _db.MatchEvents.Add(new MatchEvent
         {
             MatchId = match.Id,
             EventType = MatchEventType.MatchAbandoned,
-            MinuteOfMatch = CalculateMinuteBreakdown(match).BaseMinute,
+            MinuteOfMatch = minuteNow,
             TeamId = opponentTeamId
         });
 

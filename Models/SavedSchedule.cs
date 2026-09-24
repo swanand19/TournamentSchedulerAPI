@@ -29,6 +29,9 @@ public class SavedFixture
 {
     public int Id { get; set; }
     public int MatchNumber { get; set; }
+
+    /// <summary>Matchday this fixture belongs to — no team appears twice within a round.</summary>
+    public int Round { get; set; }
     public string Home { get; set; } = string.Empty;
     public string Away { get; set; } = string.Empty;
     public int? HomeTeamId { get; set; }

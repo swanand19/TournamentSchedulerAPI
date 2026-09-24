@@ -3,7 +3,6 @@ using TournamentScheduler.Api.Data;
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Services;
 using Microsoft.EntityFrameworkCore;
-using TournamentScheduler.Api.Data;
 
 namespace TournamentScheduler.Api.Controllers;
 
@@ -63,7 +62,13 @@ public class TournamentController : ControllerBase
         if (request.MatchesPerTeam < 1)
             return BadRequest("Matches per team must be at least 1.");
 
-        var result = _scheduleService.GenerateTournamentSchedule(request.Groups, request.MatchesPerTeam);
+        // Without repeats the ceiling is (group size - 1); with repeats a hard cap keeps a typo
+        // from generating thousands of fixtures.
+        const int absoluteCap = 60;
+        if (request.MatchesPerTeam > absoluteCap)
+            return BadRequest($"Matches per team is capped at {absoluteCap}.");
+
+        var result = _scheduleService.GenerateTournamentSchedule(request.Groups, request.MatchesPerTeam, request.AllowRepeatFixtures);
         return Ok(result);
     }
 

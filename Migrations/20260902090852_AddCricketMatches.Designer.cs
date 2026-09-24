@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TournamentScheduler.Api.Data;
 
@@ -11,9 +12,11 @@ using TournamentScheduler.Api.Data;
 namespace TournamentScheduler.Api.Migrations
 {
     [DbContext(typeof(TournamentDbContext))]
-    partial class TournamentDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260902090852_AddCricketMatches")]
+    partial class AddCricketMatches
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,217 +24,6 @@ namespace TournamentScheduler.Api.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketBall", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BallInOver")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("BattersCrossed")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("BowlerId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Byes")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("DismissedPlayerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("FielderId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("InningsId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsFreeHit")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsNoBall")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsWide")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("LegByes")
-                        .HasColumnType("int");
-
-                    b.Property<int>("NoBallPenalty")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("NonStrikerId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("OverNumber")
-                        .HasColumnType("int");
-
-                    b.Property<int>("PenaltyRuns")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RunsOffBat")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SequenceNumber")
-                        .HasColumnType("int");
-
-                    b.Property<int>("StrikerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("WicketType")
-                        .HasColumnType("int");
-
-                    b.Property<int>("WideExtraRuns")
-                        .HasColumnType("int");
-
-                    b.Property<int>("WidePenalty")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InningsId", "SequenceNumber")
-                        .IsUnique();
-
-                    b.ToTable("CricketBalls");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketInnings", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BallsPerOver")
-                        .HasColumnType("int");
-
-                    b.Property<int>("BattingSideSize")
-                        .HasColumnType("int");
-
-                    b.Property<int>("BattingTeamId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("BattingTeamInningsIndex")
-                        .HasColumnType("int");
-
-                    b.Property<string>("BattingTeamName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("BowlingTeamId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("BowlingTeamName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("Byes")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("CricketMatchId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("CurrentBowlerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("EndReason")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("FreeHitPending")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("InningsNumber")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsFollowOn")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsSuperOver")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("LegByes")
-                        .HasColumnType("int");
-
-                    b.Property<int>("LegalBalls")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("LoneBatter")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("MaxOversPerBowler")
-                        .HasColumnType("int");
-
-                    b.Property<int>("NoBalls")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("NonStrikerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("OpeningBowlerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("OpeningNonStrikerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("OpeningStrikerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("OversLimit")
-                        .HasColumnType("int");
-
-                    b.Property<int>("PenaltyRuns")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PreviousBowlerId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Runs")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("StrikerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("Target")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Wickets")
-                        .HasColumnType("int");
-
-                    b.Property<int>("WicketsToEndInnings")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Wides")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CricketMatchId", "InningsNumber")
-                        .IsUnique();
-
-                    b.ToTable("CricketInnings");
-                });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatch", b =>
                 {
@@ -256,9 +48,6 @@ namespace TournamentScheduler.Api.Migrations
 
                     b.Property<int>("CurrentInningsNumber")
                         .HasColumnType("int");
-
-                    b.Property<bool>("FollowOnEnforced")
-                        .HasColumnType("bit");
 
                     b.Property<int?>("ForfeitWinnerTeamId")
                         .HasColumnType("int");
@@ -324,113 +113,6 @@ namespace TournamentScheduler.Api.Migrations
                     b.HasIndex("TournamentId");
 
                     b.ToTable("CricketMatches");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatchEvent", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("CricketMatchId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("EventType")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("InningsNumber")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PlayerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("TeamId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CricketMatchId");
-
-                    b.ToTable("CricketMatchEvents");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatchPlayer", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("BattingOrder")
-                        .HasColumnType("int");
-
-                    b.Property<int>("CricketMatchId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsCaptain")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsWicketKeeper")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("PlayerId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PlayerName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("SquadStatus")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TeamId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PlayerId");
-
-                    b.HasIndex("TeamId");
-
-                    b.HasIndex("CricketMatchId", "PlayerId")
-                        .IsUnique();
-
-                    b.ToTable("CricketMatchPlayers");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.PlayerCricketProfile", b =>
-                {
-                    b.Property<int>("PlayerId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("BattingOrderPreference")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("BattingStyle")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("BowlingArm")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("BowlingType")
-                        .HasColumnType("int");
-
-                    b.Property<int>("PrimaryRole")
-                        .HasColumnType("int");
-
-                    b.HasKey("PlayerId");
-
-                    b.ToTable("PlayerCricketProfiles");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Match", b =>
@@ -701,9 +383,6 @@ namespace TournamentScheduler.Api.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int?>("PersonId")
-                        .HasColumnType("int");
-
                     b.Property<string>("Position")
                         .HasColumnType("nvarchar(max)");
 
@@ -820,9 +499,6 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("DefaultCaptainPlayerId")
-                        .HasColumnType("int");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
@@ -865,28 +541,6 @@ namespace TournamentScheduler.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Tournaments");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketBall", b =>
-                {
-                    b.HasOne("TournamentScheduler.Api.Models.Cricket.CricketInnings", "Innings")
-                        .WithMany("Balls")
-                        .HasForeignKey("InningsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Innings");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketInnings", b =>
-                {
-                    b.HasOne("TournamentScheduler.Api.Models.Cricket.CricketMatch", "Match")
-                        .WithMany("Innings")
-                        .HasForeignKey("CricketMatchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Match");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatch", b =>
@@ -1005,55 +659,6 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("SavedFixture");
 
                     b.Navigation("Tournament");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatchEvent", b =>
-                {
-                    b.HasOne("TournamentScheduler.Api.Models.Cricket.CricketMatch", "Match")
-                        .WithMany("Events")
-                        .HasForeignKey("CricketMatchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Match");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatchPlayer", b =>
-                {
-                    b.HasOne("TournamentScheduler.Api.Models.Cricket.CricketMatch", "Match")
-                        .WithMany("Squad")
-                        .HasForeignKey("CricketMatchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("TournamentScheduler.Api.Models.Player", "Player")
-                        .WithMany()
-                        .HasForeignKey("PlayerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("TournamentScheduler.Api.Models.Team", "Team")
-                        .WithMany()
-                        .HasForeignKey("TeamId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Match");
-
-                    b.Navigation("Player");
-
-                    b.Navigation("Team");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.PlayerCricketProfile", b =>
-                {
-                    b.HasOne("TournamentScheduler.Api.Models.Player", "Player")
-                        .WithOne("Cricket")
-                        .HasForeignKey("TournamentScheduler.Api.Models.Cricket.PlayerCricketProfile", "PlayerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Player");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Match", b =>
@@ -1193,20 +798,6 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("Tournament");
                 });
 
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketInnings", b =>
-                {
-                    b.Navigation("Balls");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatch", b =>
-                {
-                    b.Navigation("Events");
-
-                    b.Navigation("Innings");
-
-                    b.Navigation("Squad");
-                });
-
             modelBuilder.Entity("TournamentScheduler.Api.Models.Match", b =>
                 {
                     b.Navigation("Events");
@@ -1214,11 +805,6 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("MatchPlayers");
 
                     b.Navigation("PenaltyKicks");
-                });
-
-            modelBuilder.Entity("TournamentScheduler.Api.Models.Player", b =>
-                {
-                    b.Navigation("Cricket");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.SavedGroup", b =>

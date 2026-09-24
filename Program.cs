@@ -14,6 +14,9 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
+builder.Services.AddScoped<IStatsService, StatsService>();
+builder.Services.AddScoped<TournamentScheduler.Api.Services.Cricket.ICricketScoringService,
+    TournamentScheduler.Api.Services.Cricket.CricketScoringService>();
 
 builder.Services.AddDbContext<TournamentDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
