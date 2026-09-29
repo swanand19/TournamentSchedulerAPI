@@ -1,11 +1,14 @@
-using Microsoft.EntityFrameworkCore;
 using TournamentScheduler.Api.Data;
+using TournamentScheduler.Api.Http;
 using TournamentScheduler.Api.Services;
+using TournamentScheduler.Api.Services.Cricket;
+using TournamentScheduler.Api.Services.Football;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers()
+// Every response goes out as { status, data } — see Http/ApiResponse.cs.
+builder.Services.AddControllers(options => options.Filters.Add<ApiResponseFilter>())
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
@@ -13,13 +16,19 @@ builder.Services.AddControllers()
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+// Layers, top to bottom: controllers -> services -> IDataService<T> -> IRepository<T> -> DbContext.
+// The last three are registered by AddDataLayer; only the Data folder ever touches the database.
+builder.Services.AddDataLayer(builder.Configuration);
+
+builder.Services.AddScoped<IHealthService, HealthService>();
+builder.Services.AddScoped<ITournamentService, TournamentService>();
+builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.AddScoped<IStatsService, StatsService>();
-builder.Services.AddScoped<TournamentScheduler.Api.Services.Cricket.ICricketScoringService,
-    TournamentScheduler.Api.Services.Cricket.CricketScoringService>();
-
-builder.Services.AddDbContext<TournamentDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddScoped<IFootballMatchService, FootballMatchService>();
+builder.Services.AddScoped<ICricketScoringService, CricketScoringService>();
+builder.Services.AddScoped<ICricketMatchQueryService, CricketMatchQueryService>();
+builder.Services.AddScoped<ICricketStatsService, CricketStatsService>();
 
 builder.Services.AddCors(options =>
 {
@@ -31,6 +40,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// First, so a crash or an unmatched URL anywhere below still answers in the { status, data } envelope.
+app.UseApiResponses();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -38,8 +50,18 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowFrontend");
-app.UseHttpsRedirection();
+
+// On by default. The IIS site that serves phones over plain HTTP on the home network turns it off
+// (Hosting__RedirectToHttps=false in its web.config), because a phone can't follow a redirect to
+// an HTTPS address the laptop has no trusted certificate for.
+if (app.Configuration.GetValue("Hosting:RedirectToHttps", true))
+{
+    app.UseHttpsRedirection();
+}
 app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// Lets the contract tests host this exact pipeline (WebApplicationFactory<Program>).
+public partial class Program { }

@@ -1,5 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using TournamentScheduler.Api.Data;
+using TournamentScheduler.Api.Data.DataServices;
+using TournamentScheduler.Api.Data.Queries;
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Cricket;
 
@@ -21,11 +22,24 @@ namespace TournamentScheduler.Api.Services.Cricket;
 /// </summary>
 public partial class CricketScoringService : ICricketScoringService
 {
-    private readonly TournamentDbContext _db;
+    private readonly IDataService<CricketMatch> _matches;
+    private readonly IDataService<CricketMatchPlayer> _squads;
+    private readonly IDataService<CricketBall> _balls;
+    private readonly IDataService<Player> _players;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public CricketScoringService(TournamentDbContext db)
+    public CricketScoringService(
+        IDataService<CricketMatch> matches,
+        IDataService<CricketMatchPlayer> squads,
+        IDataService<CricketBall> balls,
+        IDataService<Player> players,
+        IUnitOfWork unitOfWork)
     {
-        _db = db;
+        _matches = matches;
+        _squads = squads;
+        _balls = balls;
+        _players = players;
+        _unitOfWork = unitOfWork;
     }
 
     // -----------------------------------------------------------------
@@ -34,11 +48,8 @@ public partial class CricketScoringService : ICricketScoringService
 
     public Task<CricketMatch?> GetAsync(int matchId) => LoadAsync(matchId);
 
-    private async Task<CricketMatch?> LoadAsync(int matchId) =>
-        await _db.CricketMatches
-            .Include(m => m.Squad)
-            .Include(m => m.Innings).ThenInclude(i => i.Balls)
-            .FirstOrDefaultAsync(m => m.Id == matchId);
+    private Task<CricketMatch?> LoadAsync(int matchId) =>
+        _matches.FirstOrDefaultAsync(m => m.Id == matchId, CricketMatchQueries.Full);
 
     private static CricketInnings? CurrentInnings(CricketMatch match) =>
         match.Innings.FirstOrDefault(i => i.InningsNumber == match.CurrentInningsNumber);
@@ -92,7 +103,7 @@ public partial class CricketScoringService : ICricketScoringService
         match.TossWinnerTeamId = request.TossWinnerTeamId;
         match.TossDecision = request.TossDecision;
 
-        _db.CricketMatchPlayers.RemoveRange(match.Squad);
+        _squads.RemoveRange(match.Squad);
         match.Squad.Clear();
         foreach (var p in squadResult.Value!) match.Squad.Add(p);
 
@@ -101,7 +112,7 @@ public partial class CricketScoringService : ICricketScoringService
             $"{TeamName(match, request.TossWinnerTeamId)} won the toss and chose to {decision}.",
             request.TossWinnerTeamId);
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
 
@@ -143,9 +154,7 @@ public partial class CricketScoringService : ICricketScoringService
         if (duplicates) return (null, "A player cannot be listed twice.");
 
         var playerIds = selections.Select(s => s.PlayerId).ToList();
-        var players = await _db.Players
-            .Where(p => playerIds.Contains(p.Id))
-            .ToDictionaryAsync(p => p.Id);
+        var players = (await _players.ListAsync(p => playerIds.Contains(p.Id))).ToDictionary(p => p.Id);
 
         foreach (var selection in selections)
         {
@@ -228,7 +237,7 @@ public partial class CricketScoringService : ICricketScoringService
             IsSuperOver = isSuperOver,
             BallsPerOver = match.Rules.BallsPerOver,
             // A super over is one over and two wickets whatever the format says.
-            OversLimit = isSuperOver ? 1 : request.OversLimit ?? match.Rules.OversPerInnings,
+            OversLimit = isSuperOver ? 1 : request.OversLimit ?? DefaultOversLimit(match),
             WicketsToEndInnings = isSuperOver ? 2 : match.Rules.WicketsToEndInnings,
             BattingSideSize = match.Rules.PlayersPerSide,
             MaxOversPerBowler = isSuperOver ? 1 : match.Rules.MaxOversPerBowler,
@@ -257,8 +266,21 @@ public partial class CricketScoringService : ICricketScoringService
             (innings.Target is int t ? $", chasing {t}." : "."),
             battingTeamId);
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
+    }
+
+    /// <summary>
+    /// The overs a new innings gets when the scorer doesn't say. After rain shortened the first
+    /// innings of a one-innings match, the chase normally gets the same, so that is the default.
+    /// </summary>
+    private static int? DefaultOversLimit(CricketMatch match)
+    {
+        var rules = match.Rules.OversPerInnings;
+        if (match.Rules.InningsPerSide != 1) return rules;
+
+        var first = match.Innings.FirstOrDefault(i => !i.IsSuperOver && i.InningsNumber == 1);
+        return first?.OversLimit is int reduced && reduced < rules ? reduced : rules;
     }
 
     /// <summary>
@@ -272,8 +294,13 @@ public partial class CricketScoringService : ICricketScoringService
 
         if (isSuperOver)
         {
+            // Super overs come in pairs: both sides bat once. The side that batted second in the
+            // match opens the first super over, and the side that batted second in the previous
+            // super over opens the next (ICC Super Over playing conditions) — so the opener
+            // alternates pair by pair.
             var superPlayed = match.Innings.Count(i => i.IsSuperOver);
-            return superPlayed % 2 == 0 ? second : first;
+            var opener = (superPlayed / 2) % 2 == 0 ? second : first;
+            return superPlayed % 2 == 0 ? opener : OtherTeam(match, opener);
         }
 
         var number = match.Innings.Count(i => !i.IsSuperOver) + 1;
@@ -294,13 +321,21 @@ public partial class CricketScoringService : ICricketScoringService
     {
         if (innings.IsSuperOver)
         {
-            var firstSuper = match.Innings.FirstOrDefault(i => i.IsSuperOver);
-            return firstSuper == null ? null : firstSuper.Runs + 1;
+            // Only the second innings of a pair chases, and it chases its own pair's first innings
+            // — not the first super over of the match.
+            var earlier = match.Innings
+                .Where(i => i.IsSuperOver && i.InningsNumber < innings.InningsNumber)
+                .OrderBy(i => i.InningsNumber)
+                .ToList();
+            return earlier.Count % 2 == 1 ? earlier[^1].Runs + 1 : null;
         }
 
         var mainInnings = match.Innings.Where(i => !i.IsSuperOver).ToList();
         var isFinalInnings = mainInnings.Count + 1 == match.MaxInnings;
         if (!isFinalInnings) return null;
+
+        // A rain-affected chase is priced by Duckworth-Lewis-Stern when the match plays it.
+        if (IsDlsChase(match, innings)) return DlsTarget(match, innings);
 
         var own = mainInnings.Where(i => i.BattingTeamId == innings.BattingTeamId).Sum(i => i.Runs);
         var opponent = mainInnings.Where(i => i.BattingTeamId != innings.BattingTeamId).Sum(i => i.Runs);
@@ -379,6 +414,10 @@ public partial class CricketScoringService : ICricketScoringService
                 ? request.DismissedPlayerId ?? innings.StrikerId
                 : null,
             FielderId = request.WicketType.HasValue ? request.FielderId : null,
+            IsDirectHit = request.WicketType == DismissalType.RunOut && request.IsDirectHit,
+            RunOutReceiverId = request.WicketType == DismissalType.RunOut && !request.IsDirectHit
+                ? request.RunOutReceiverId
+                : null,
             BattersCrossed = request.BattersCrossed
         };
 
@@ -386,7 +425,7 @@ public partial class CricketScoringService : ICricketScoringService
         Recompute(innings, match.Rules);
         CloseInningsIfFinished(match, innings);
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
 
@@ -438,6 +477,9 @@ public partial class CricketScoringService : ICricketScoringService
         if (dismissed != innings.StrikerId && dismissed != innings.NonStrikerId)
             return "The dismissed player is not at the crease.";
 
+        if (dismissed != innings.StrikerId && !DismissalRules.CanDismissNonStriker(wicket))
+            return "Only the striker can be out that way. The non-striker can only be run out, obstruct the field or retire.";
+
         if (wicket == DismissalType.RunOut && request.DismissedPlayerId is null)
             return "A run-out must say which batter was dismissed.";
 
@@ -447,6 +489,27 @@ public partial class CricketScoringService : ICricketScoringService
         if (DismissalRules.TakesFielder(wicket) && request.FielderId is null
             && wicket != DismissalType.RunOut)
             return $"{wicket} needs the fielder who took it.";
+
+        if (wicket == DismissalType.RunOut)
+        {
+            if (request.IsDirectHit && request.FielderId is null)
+                return "A direct hit needs the fielder who threw it.";
+
+            if (request.IsDirectHit && request.RunOutReceiverId is not null)
+                return "A direct hit involves one fielder; leave the receiver out.";
+
+            if (request.RunOutReceiverId is int receiver)
+            {
+                if (request.FielderId is null)
+                    return "Name the fielder who threw the ball as well as the one who received it.";
+
+                if (receiver == request.FielderId)
+                    return "The thrower and the receiver must be different fielders.";
+
+                if (!IsPlaying(match, receiver, innings.BowlingTeamId))
+                    return "The receiving fielder is not in the fielding side's XI.";
+            }
+        }
 
         return null;
     }
@@ -552,7 +615,7 @@ public partial class CricketScoringService : ICricketScoringService
         if (last == null) return CricketResult<CricketMatch>.Fail("No deliveries have been bowled in this innings.");
 
         innings.Balls.Remove(last);
-        _db.CricketBalls.Remove(last);
+        _balls.Remove(last);
 
         // The ball may have been the one that ended the innings, and possibly the match with it.
         innings.Status = InningsStatus.InProgress;
@@ -564,6 +627,7 @@ public partial class CricketScoringService : ICricketScoringService
             match.Status = innings.IsSuperOver ? CricketMatchStatus.SuperOver : CricketMatchStatus.InProgress;
             match.WinnerTeamId = null;
             match.IsTie = match.IsDraw = match.IsNoResult = false;
+            match.WonByDls = false;
             match.ResultSummary = null;
             match.CompletedAt = null;
         }
@@ -573,7 +637,7 @@ public partial class CricketScoringService : ICricketScoringService
 
         Log(match, CricketMatchEventType.BallUndone, "The last delivery was undone.");
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
 
@@ -605,10 +669,16 @@ public partial class CricketScoringService : ICricketScoringService
         if (innings.StrikerId == null) innings.StrikerId = request.PlayerId;
         else innings.NonStrikerId = request.PlayerId;
 
+        // The scorer saw who faces next. The next delivery records its striker, so the fold picks
+        // this up from there on and an undo can't lose it.
+        var newOnStrike = innings.StrikerId == request.PlayerId;
+        if (request.OnStrike is bool onStrike && onStrike != newOnStrike && innings.NonStrikerId != null)
+            (innings.StrikerId, innings.NonStrikerId) = (innings.NonStrikerId, innings.StrikerId);
+
         Log(match, CricketMatchEventType.BatterIn,
             $"{NameOf(match, request.PlayerId)} came in.", innings.BattingTeamId, request.PlayerId);
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
 
@@ -650,7 +720,7 @@ public partial class CricketScoringService : ICricketScoringService
         Log(match, CricketMatchEventType.BowlerChanged,
             $"{NameOf(match, request.PlayerId)} came on to bowl.", innings.BowlingTeamId, request.PlayerId);
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
 

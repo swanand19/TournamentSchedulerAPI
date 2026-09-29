@@ -1,16 +1,109 @@
 using TournamentScheduler.Api.Data;
+using TournamentScheduler.Api.Data.DataServices;
+using TournamentScheduler.Api.Data.Queries;
 using TournamentScheduler.Api.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace TournamentScheduler.Api.Services;
 
-public class ScheduleService : IScheduleService
+public class ScheduleService : ServiceBase, IScheduleService
 {
-    private readonly TournamentDbContext _db;
-    public ScheduleService(TournamentDbContext db)
+    private readonly IDataService<Tournament> _tournaments;
+    private readonly IDataService<SavedSchedule> _schedules;
+    private readonly IDataService<Team> _teams;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public ScheduleService(
+        IDataService<Tournament> tournaments,
+        IDataService<SavedSchedule> schedules,
+        IDataService<Team> teams,
+        IUnitOfWork unitOfWork)
     {
-        _db = db;
+        _tournaments = tournaments;
+        _schedules = schedules;
+        _teams = teams;
+        _unitOfWork = unitOfWork;
     }
+
+    // -----------------------------------------------------------------
+    // Endpoint actions
+    // -----------------------------------------------------------------
+
+    public ServiceResult<object> DrawGroups(RandomizeGroupsRequest request)
+    {
+        if (request.GroupCount < 1)
+            return BadRequest("Group count must be at least 1.");
+
+        var minTeamsNeeded = Math.Max(2, request.GroupCount * 2);
+        if (request.TeamNames == null || request.TeamNames.Count < minTeamsNeeded)
+            return BadRequest($"Need at least {minTeamsNeeded} teams for {request.GroupCount} group(s) (min 2 per group).");
+
+        var groups = RandomizeGroups(request.TeamNames, request.GroupCount);
+        return Ok(new { groups });
+    }
+
+    public ServiceResult<object> CheckManualGroups(ManualGroupsRequest request)
+    {
+        if (request.Groups == null || request.Groups.Count < 1)
+            return BadRequest("Provide at least 1 group.");
+
+        if (request.Groups.Any(g => g.Teams.Count == 0))
+            return BadRequest("Every group needs at least one team.");
+
+        var allTeams = request.Groups.SelectMany(g => g.Teams).ToList();
+        var duplicates = allTeams.GroupBy(t => t).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        if (duplicates.Any())
+            return BadRequest($"Team(s) appear in more than one group: {string.Join(", ", duplicates)}");
+
+        return Ok(new { groups = request.Groups });
+    }
+
+    public ServiceResult<TournamentSchedule> GenerateSchedule(GenerateScheduleRequest request)
+    {
+        if (request.Groups == null || request.Groups.Count < 1)
+            return BadRequest("Provide at least 1 group.");
+
+        if (request.Groups.Any(g => g.Teams.Count < 2))
+            return BadRequest("Every group needs at least 2 teams.");
+
+        if (request.MatchesPerTeam < 1)
+            return BadRequest("Matches per team must be at least 1.");
+
+        // Without repeats the ceiling is (group size - 1); with repeats a hard cap keeps a typo
+        // from generating thousands of fixtures.
+        const int absoluteCap = 60;
+        if (request.MatchesPerTeam > absoluteCap)
+            return BadRequest($"Matches per team is capped at {absoluteCap}.");
+
+        return Success(GenerateTournamentSchedule(request.Groups, request.MatchesPerTeam, request.AllowRepeatFixtures));
+    }
+
+    public async Task<ServiceResult<object>> ApproveAsync(ApproveScheduleWithTournamentRequest request)
+    {
+        if (request.Schedule?.Groups == null || request.Schedule.Groups.Count == 0)
+            return BadRequest("No schedule to approve.");
+
+        if (request.TournamentId <= 0)
+            return BadRequest("A tournament must be specified.");
+
+        var tournament = await _tournaments.GetByIdAsync(request.TournamentId);
+        if (tournament == null) return NotFound("Tournament not found.");
+        if (tournament.IsStarted)
+            return BadRequest("This tournament has already started — its schedule is locked and can no longer be changed.");
+
+        var saved = await ApproveScheduleAsync(request.TournamentId, request.Schedule);
+        return Ok(new { savedScheduleId = saved.Id, savedAt = saved.CreatedAt });
+    }
+
+    public async Task<ServiceResult<SavedSchedule>> GetSavedScheduleAsync(int id)
+    {
+        var schedule = await _schedules.FirstOrDefaultAsync(s => s.Id == id, ScheduleQueries.WithFixtures);
+        if (schedule == null) return NotFound();
+        return Success(schedule);
+    }
+
+    // -----------------------------------------------------------------
+    // Drawing groups and generating fixtures
+    // -----------------------------------------------------------------
 
     public List<Group> RandomizeGroups(List<string> teams, int groupCount)
     {
@@ -369,9 +462,7 @@ public class ScheduleService : IScheduleService
     public async Task<SavedSchedule> ApproveScheduleAsync(int tournamentId, TournamentSchedule schedule)
     {
         // deactivate any previously active schedule for this tournament
-        var existingActive = await _db.SavedSchedules
-            .Where(s => s.TournamentId == tournamentId && s.IsActive)
-            .ToListAsync();
+        var existingActive = await _schedules.ListAsync(s => s.TournamentId == tournamentId && s.IsActive);
 
         foreach (var old in existingActive)
         {
@@ -382,9 +473,8 @@ public class ScheduleService : IScheduleService
         // names, so starting the tournament had to match on the name — and a team renamed between
         // approval and kick-off silently produced a match with no team id, which then vanished
         // from the standings. Pinning the id here means the name is only a display label.
-        var teamIdsByName = await _db.Teams
-            .Where(t => t.TournamentId == tournamentId)
-            .ToDictionaryAsync(t => t.Name, t => t.Id);
+        var teamIdsByName = (await _teams.ListAsync(t => t.TournamentId == tournamentId))
+            .ToDictionary(t => t.Name, t => t.Id);
 
         int? TeamId(string name) =>
             teamIdsByName.TryGetValue(name, out var id) ? id : null;
@@ -410,8 +500,8 @@ public class ScheduleService : IScheduleService
             }).ToList()
         };
 
-        _db.SavedSchedules.Add(saved);
-        await _db.SaveChangesAsync();
+        _schedules.Add(saved);
+        await _unitOfWork.SaveChangesAsync();
         return saved;
     }
 }

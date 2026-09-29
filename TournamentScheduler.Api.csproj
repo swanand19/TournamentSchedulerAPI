@@ -16,4 +16,9 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Stored procedure SQL, applied by migrations via migrationBuilder.SqlFile("name.sql"). -->
+    <EmbeddedResource Include="Data\StoredProcedures\Sql\**\*.sql" />
+  </ItemGroup>
+
 </Project>

@@ -18,7 +18,8 @@ public enum CricketMatchEventType
     SuperOverStarted = 7,
     MatchCompleted = 8,
     MatchAbandoned = 9,
-    BallUndone = 10
+    BallUndone = 10,
+    OversReduced = 11
 }
 
 public class CricketMatchEvent

@@ -1,104 +1,38 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using TournamentScheduler.Api.Data;
+using Microsoft.AspNetCore.Mvc;
+using TournamentScheduler.Api.Http;
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Services;
-using Microsoft.EntityFrameworkCore;
 
 namespace TournamentScheduler.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class TournamentController : ControllerBase
+public class TournamentController : ApiController
 {
     private readonly IScheduleService _scheduleService;
-    private readonly TournamentDbContext _db;
 
-    public TournamentController(IScheduleService scheduleService, TournamentDbContext db)
+    public TournamentController(IScheduleService scheduleService)
     {
         _scheduleService = scheduleService;
-        _db = db;
     }
 
     [HttpPost("groups/randomize")]
-    public ActionResult<object> RandomizeGroups([FromBody] RandomizeGroupsRequest request)
-    {
-        if (request.GroupCount < 1)
-            return BadRequest("Group count must be at least 1.");
-
-        var minTeamsNeeded = Math.Max(2, request.GroupCount * 2);
-        if (request.TeamNames == null || request.TeamNames.Count < minTeamsNeeded)
-            return BadRequest($"Need at least {minTeamsNeeded} teams for {request.GroupCount} group(s) (min 2 per group).");
-
-        var groups = _scheduleService.RandomizeGroups(request.TeamNames, request.GroupCount);
-        return Ok(new { groups });
-    }
+    public ActionResult<ApiResponse<object>> RandomizeGroups([FromBody] RandomizeGroupsRequest request) =>
+        Respond(_scheduleService.DrawGroups(request));
 
     [HttpPost("groups/manual")]
-    public ActionResult<object> SetManualGroups([FromBody] ManualGroupsRequest request)
-    {
-        if (request.Groups == null || request.Groups.Count < 1)
-            return BadRequest("Provide at least 1 group.");
-
-        if (request.Groups.Any(g => g.Teams.Count == 0))
-            return BadRequest("Every group needs at least one team.");
-
-        var allTeams = request.Groups.SelectMany(g => g.Teams).ToList();
-        var duplicates = allTeams.GroupBy(t => t).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
-        if (duplicates.Any())
-            return BadRequest($"Team(s) appear in more than one group: {string.Join(", ", duplicates)}");
-
-        return Ok(new { groups = request.Groups });
-    }
+    public ActionResult<ApiResponse<object>> SetManualGroups([FromBody] ManualGroupsRequest request) =>
+        Respond(_scheduleService.CheckManualGroups(request));
 
     [HttpPost("schedule")]
-    public ActionResult<TournamentSchedule> GenerateSchedule([FromBody] GenerateScheduleRequest request)
-    {
-        if (request.Groups == null || request.Groups.Count < 1)
-            return BadRequest("Provide at least 1 group.");
-
-        if (request.Groups.Any(g => g.Teams.Count < 2))
-            return BadRequest("Every group needs at least 2 teams.");
-
-        if (request.MatchesPerTeam < 1)
-            return BadRequest("Matches per team must be at least 1.");
-
-        // Without repeats the ceiling is (group size - 1); with repeats a hard cap keeps a typo
-        // from generating thousands of fixtures.
-        const int absoluteCap = 60;
-        if (request.MatchesPerTeam > absoluteCap)
-            return BadRequest($"Matches per team is capped at {absoluteCap}.");
-
-        var result = _scheduleService.GenerateTournamentSchedule(request.Groups, request.MatchesPerTeam, request.AllowRepeatFixtures);
-        return Ok(result);
-    }
+    public ActionResult<ApiResponse<TournamentSchedule>> GenerateSchedule([FromBody] GenerateScheduleRequest request) =>
+        Respond(_scheduleService.GenerateSchedule(request));
 
     [HttpPost("schedule/approve")]
-    public async Task<ActionResult<object>> ApproveSchedule([FromBody] ApproveScheduleWithTournamentRequest request)
-    {
-        if (request.Schedule?.Groups == null || request.Schedule.Groups.Count == 0)
-            return BadRequest("No schedule to approve.");
-
-        if (request.TournamentId <= 0)
-            return BadRequest("A tournament must be specified.");
-
-        var tournament = await _db.Tournaments.FindAsync(request.TournamentId);
-        if (tournament == null) return NotFound("Tournament not found.");
-        if (tournament.IsStarted)
-            return BadRequest("This tournament has already started — its schedule is locked and can no longer be changed.");
-
-        var saved = await _scheduleService.ApproveScheduleAsync(request.TournamentId, request.Schedule);
-        return Ok(new { savedScheduleId = saved.Id, savedAt = saved.CreatedAt });
-    }
+    public async Task<ActionResult<ApiResponse<object>>> ApproveSchedule([FromBody] ApproveScheduleWithTournamentRequest request) =>
+        Respond(await _scheduleService.ApproveAsync(request));
 
     [HttpGet("schedule/{id}")]
-    public async Task<ActionResult<SavedSchedule>> GetSavedSchedule(int id, [FromServices] TournamentDbContext db)
-    {
-        var result = await db.SavedSchedules
-            .Include(s => s.Groups)
-            .ThenInclude(g => g.Fixtures)
-            .FirstOrDefaultAsync(s => s.Id == id);
-
-        if (result == null) return NotFound();
-        return Ok(result);
-    }
+    public async Task<ActionResult<ApiResponse<SavedSchedule>>> GetSavedSchedule(int id) =>
+        Respond(await _scheduleService.GetSavedScheduleAsync(id));
 }

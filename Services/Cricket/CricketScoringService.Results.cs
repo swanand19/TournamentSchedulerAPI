@@ -32,7 +32,7 @@ public partial class CricketScoringService
 
         CloseInnings(match, innings, request.Reason);
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
 
@@ -55,6 +55,13 @@ public partial class CricketScoringService
 
     private void CloseInnings(CricketMatch match, CricketInnings innings, InningsEndReason reason)
     {
+        // Play stopping for good is, to DLS, an interruption that takes every remaining over.
+        if (reason == InningsEndReason.Abandoned && !innings.IsSuperOver
+            && DlsStandardEdition.Applies(match.Rules))
+        {
+            RecordInterruption(innings, innings.LegalBalls);
+        }
+
         innings.Status = InningsStatus.Completed;
         innings.EndReason = reason;
         innings.CompletedAt = DateTime.UtcNow;
@@ -99,6 +106,9 @@ public partial class CricketScoringService
             WinByWickets(match, justEnded);
             return;
         }
+
+        // A rain-affected chase is settled against its revised target, not the raw aggregate.
+        if (TryDecideByDls(match, justEnded)) return;
 
         if (CompletedInningsFor(match, first) >= perSide && CompletedInningsFor(match, second) >= perSide)
         {
@@ -153,6 +163,12 @@ public partial class CricketScoringService
 
         if (chase.BallsRemaining is int balls && balls > 0)
             summary += $" ({balls} ball{Plural(balls)} remaining)";
+
+        if (TargetWasRevised(match, chase))
+        {
+            summary += " (DLS method)";
+            match.WonByDls = true;
+        }
 
         Win(match, chase.BattingTeamId, summary);
     }
@@ -231,7 +247,10 @@ public partial class CricketScoringService
     {
         var supers = match.Innings.Where(i => i.IsSuperOver).OrderBy(i => i.InningsNumber).ToList();
 
-        if (supers.Count < 2 || !supers[^1].IsComplete || !supers[^2].IsComplete)
+        // A super over is a pair of innings. Nothing is decided until both sides have batted in the
+        // current one — comparing across pairs is what used to hand the match to the side that
+        // batted last in the previous (tied) super over before the other side had batted.
+        if (supers.Count == 0 || supers.Count % 2 == 1 || !supers[^1].IsComplete || !supers[^2].IsComplete)
         {
             match.Status = CricketMatchStatus.SuperOver;
             return;
@@ -293,7 +312,7 @@ public partial class CricketScoringService
         Log(match, CricketMatchEventType.FollowOnEnforced,
             $"{TeamName(match, first)} enforced the follow-on, {lead} runs ahead.", first);
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
 
@@ -314,6 +333,9 @@ public partial class CricketScoringService
         var second = OtherTeam(match, first.Value);
         var supers = match.Innings.Where(i => i.IsSuperOver).ToList();
 
+        if (supers.Count % 2 == 1)
+            return CricketResult<CricketMatch>.Fail("The current super over isn't finished — both sides bat once.");
+
         // Legitimate only from level scores: either the match itself was tied, or the last pair of
         // super overs was.
         var level = supers.Count >= 2
@@ -327,7 +349,7 @@ public partial class CricketScoringService
         match.ResultSummary = null;
         Log(match, CricketMatchEventType.SuperOverStarted, "A super over will decide it.");
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
 
@@ -351,7 +373,7 @@ public partial class CricketScoringService
 
             match.ForfeitWinnerTeamId = awarded;
             Win(match, awarded, $"{TeamName(match, awarded)} won (awarded)");
-            await _db.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync();
             return CricketResult<CricketMatch>.Success(match);
         }
 
@@ -364,7 +386,7 @@ public partial class CricketScoringService
             match.Status = CricketMatchStatus.Completed;
             match.CompletedAt = DateTime.UtcNow;
             Log(match, CricketMatchEventType.MatchAbandoned, "Abandoned — no result.");
-            await _db.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync();
             return CricketResult<CricketMatch>.Success(match);
         }
 
@@ -404,7 +426,7 @@ public partial class CricketScoringService
             }
         }
 
-        await _db.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
 

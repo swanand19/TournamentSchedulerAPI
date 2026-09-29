@@ -114,6 +114,9 @@ public class CricketInnings
 
     public List<CricketBall> Balls { get; set; } = new();
 
+    /// <summary>Overs taken away while this innings was in play, in the order they happened.</summary>
+    public List<CricketInterruption> Interruptions { get; set; } = new();
+
     // --- Derived ------------------------------------------------------
 
     [NotMapped]

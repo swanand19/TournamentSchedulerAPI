@@ -54,6 +54,9 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<int>("InningsId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsDirectHit")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsFreeHit")
                         .HasColumnType("bit");
 
@@ -76,6 +79,9 @@ namespace TournamentScheduler.Api.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("PenaltyRuns")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RunOutReceiverId")
                         .HasColumnType("int");
 
                     b.Property<int>("RunsOffBat")
@@ -231,6 +237,39 @@ namespace TournamentScheduler.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("CricketInnings");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketInterruption", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AtLegalBalls")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BallsAllowedAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BallsAllowedBefore")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("InningsId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WicketsAtTime")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InningsId");
+
+                    b.ToTable("CricketInterruptions");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatch", b =>
@@ -889,6 +928,17 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("Match");
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketInterruption", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Cricket.CricketInnings", "Innings")
+                        .WithMany("Interruptions")
+                        .HasForeignKey("InningsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Innings");
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatch", b =>
                 {
                     b.HasOne("TournamentScheduler.Api.Models.Team", "AwayTeam")
@@ -1196,6 +1246,8 @@ namespace TournamentScheduler.Api.Migrations
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketInnings", b =>
                 {
                     b.Navigation("Balls");
+
+                    b.Navigation("Interruptions");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketMatch", b =>

@@ -24,6 +24,7 @@ public class TournamentDbContext : DbContext
     public DbSet<CricketInnings> CricketInnings => Set<CricketInnings>();
     public DbSet<CricketBall> CricketBalls => Set<CricketBall>();
     public DbSet<CricketMatchEvent> CricketMatchEvents => Set<CricketMatchEvent>();
+    public DbSet<CricketInterruption> CricketInterruptions => Set<CricketInterruption>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -188,6 +189,12 @@ public class TournamentDbContext : DbContext
             .HasMany(i => i.Balls)
             .WithOne(b => b.Innings)
             .HasForeignKey(b => b.InningsId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CricketInnings>()
+            .HasMany(i => i.Interruptions)
+            .WithOne(x => x.Innings)
+            .HasForeignKey(x => x.InningsId)
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<CricketMatchPlayer>()

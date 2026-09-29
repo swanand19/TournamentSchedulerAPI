@@ -69,6 +69,19 @@ public class CricketBall
     public int? FielderId { get; set; }
 
     /// <summary>
+    /// A run-out that hit the stumps straight from the fielder, with nobody else touching the ball.
+    /// <see cref="FielderId"/> is then the only fielder involved.
+    /// </summary>
+    public bool IsDirectHit { get; set; }
+
+    /// <summary>
+    /// On a two-fielder run-out, whoever gathered the throw and broke the wicket. Recorded for the
+    /// scorecard ("run out (Jadeja/Dhoni)") but credited with nothing: the run-out belongs to the
+    /// thrower, who is <see cref="FielderId"/>.
+    /// </summary>
+    public int? RunOutReceiverId { get; set; }
+
+    /// <summary>
     /// Whether the batters passed each other. Only matters on a catch, where the runs do not count
     /// but the crossing still decides which end the new batter walks to.
     /// </summary>

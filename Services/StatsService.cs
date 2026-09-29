@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore;
-using TournamentScheduler.Api.Data;
+using TournamentScheduler.Api.Data.DataServices;
+using TournamentScheduler.Api.Data.Queries;
 using TournamentScheduler.Api.Models;
 
 namespace TournamentScheduler.Api.Services;
@@ -18,11 +18,27 @@ public interface IStatsService
 /// </summary>
 public class StatsService : IStatsService
 {
-    private readonly TournamentDbContext _db;
+    private readonly IDataService<Tournament> _tournaments;
+    private readonly IDataService<Team> _teams;
+    private readonly IDataService<Match> _matches;
+    private readonly IDataService<MatchPlayer> _squads;
+    private readonly IDataService<MatchEvent> _events;
+    private readonly IDataService<PenaltyKick> _kicks;
 
-    public StatsService(TournamentDbContext db)
+    public StatsService(
+        IDataService<Tournament> tournaments,
+        IDataService<Team> teams,
+        IDataService<Match> matches,
+        IDataService<MatchPlayer> squads,
+        IDataService<MatchEvent> events,
+        IDataService<PenaltyKick> kicks)
     {
-        _db = db;
+        _tournaments = tournaments;
+        _teams = teams;
+        _matches = matches;
+        _squads = squads;
+        _events = events;
+        _kicks = kicks;
     }
 
     private const int WinPoints = 3;
@@ -30,40 +46,26 @@ public class StatsService : IStatsService
 
     public async Task<TournamentStats?> BuildAsync(int tournamentId)
     {
-        var tournament = await _db.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
+        var tournament = await _tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
         if (tournament == null) return null;
 
         // Teams and players are scoped to the tournament, so a leaderboard can never show a player
         // from another competition.
-        var teams = await _db.Teams
-            .Where(t => t.TournamentId == tournamentId)
-            .Include(t => t.Players)
-            .AsNoTracking()
-            .ToListAsync();
+        var teams = await _teams.ListAsync(t => t.TournamentId == tournamentId, TeamQueries.WithPlayers, tracking: false);
 
-        var allMatches = await _db.Matches
-            .Where(m => m.TournamentId == tournamentId)
-            .AsNoTracking()
-            .ToListAsync();
+        var allMatches = await _matches.ListAsync(m => m.TournamentId == tournamentId, tracking: false);
 
         var counted = allMatches.Where(m => m.Status == MatchStatus.Completed).ToList();
         var countedIds = counted.Select(m => m.Id).ToHashSet();
 
-        var squads = await _db.MatchPlayers
-            .Where(mp => countedIds.Contains(mp.MatchId))
-            .AsNoTracking()
-            .ToListAsync();
+        var squads = await _squads.ListAsync(mp => countedIds.Contains(mp.MatchId), tracking: false);
 
-        var events = await _db.MatchEvents
-            .Where(e => countedIds.Contains(e.MatchId))
-            .OrderBy(e => e.CreatedAt).ThenBy(e => e.Id)
-            .AsNoTracking()
-            .ToListAsync();
+        var events = await _events.ListAsync(
+            e => countedIds.Contains(e.MatchId),
+            q => q.OrderBy(e => e.CreatedAt).ThenBy(e => e.Id),
+            tracking: false);
 
-        var kicks = await _db.PenaltyKicks
-            .Where(k => countedIds.Contains(k.MatchId))
-            .AsNoTracking()
-            .ToListAsync();
+        var kicks = await _kicks.ListAsync(k => countedIds.Contains(k.MatchId), tracking: false);
 
         var playerLookup = teams
             .SelectMany(t => t.Players.Select(p => (Player: p, Team: t)))

@@ -45,7 +45,50 @@ public class CricketMatchStateDto
     /// <summary>The innings being scored, or null between innings.</summary>
     public InningsLiveState? Current { get; set; }
 
+    /// <summary>Duckworth-Lewis-Stern, when the match plays it; null otherwise.</summary>
+    public CricketDlsState? Dls { get; set; }
+
     public CricketActions Actions { get; set; } = new();
+}
+
+/// <summary>
+/// The rain rule as the scoring screen shows it: the resources each side had, the target they
+/// produce, and — during the chase — the par score that would decide it if play stopped now.
+/// </summary>
+public class CricketDlsState
+{
+    public string Edition { get; set; } = "Standard Edition";
+    public double G50 { get; set; }
+
+    public int Team1Score { get; set; }
+    /// <summary>Percent of a full 50-over innings each side had to use.</summary>
+    public double Team1Resources { get; set; }
+    public double? Team2Resources { get; set; }
+
+    public int? Target { get; set; }
+    public bool TargetRevised { get; set; }
+
+    /// <summary>During the chase: resources used and left, and the par score right now.</summary>
+    public double? Team2ResourcesUsed { get; set; }
+    public double? Team2ResourcesRemaining { get; set; }
+    public int? ParScore { get; set; }
+    /// <summary>Runs ahead of par (negative when behind). Ahead wins if play stops for good.</summary>
+    public int? RunsAheadOfPar { get; set; }
+
+    /// <summary>Overs the chasing side must face before a rain result can stand.</summary>
+    public int MinimumOversForResult { get; set; }
+    public bool ResultPossibleNow { get; set; }
+
+    public List<CricketInterruptionSummary> Interruptions { get; set; } = new();
+}
+
+public class CricketInterruptionSummary
+{
+    public int InningsNumber { get; set; }
+    public string BattingTeamName { get; set; } = string.Empty;
+    public string AtOvers { get; set; } = string.Empty;
+    public int OversBefore { get; set; }
+    public int OversAfter { get; set; }
 }
 
 public class CricketSquadMember
@@ -165,6 +208,9 @@ public class CricketActions
     public bool CanEnforceFollowOn { get; set; }
     public bool CanStartSuperOver { get; set; }
     public bool CanComplete { get; set; }
+
+    /// <summary>Overs may be taken off the innings in play (rain, bad light).</summary>
+    public bool CanReduceOvers { get; set; }
 
     /// <summary>
     /// Who bats next when an innings can be started. The alternation is not obvious — the follow-on

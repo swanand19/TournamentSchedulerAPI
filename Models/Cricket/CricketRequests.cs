@@ -56,15 +56,35 @@ public class RecordBallRequest
 
     public DismissalType? WicketType { get; set; }
     public int? DismissedPlayerId { get; set; }
+    /// <summary>The catcher, the keeper, or on a run-out the fielder who made it (the thrower).</summary>
     public int? FielderId { get; set; }
+
+    /// <summary>Run-outs only: the fielder hit the stumps directly.</summary>
+    public bool IsDirectHit { get; set; }
+
+    /// <summary>Run-outs only, when not a direct hit: who took the throw and broke the wicket.</summary>
+    public int? RunOutReceiverId { get; set; }
 
     /// <summary>Whether the batters passed each other — only consulted on a catch.</summary>
     public bool BattersCrossed { get; set; }
 }
 
+/// <summary>Overs lost to rain or delay, taken off the innings being played.</summary>
+public class ReduceOversRequest
+{
+    /// <summary>The innings' new total, in overs. Must be fewer than now and not below overs bowled.</summary>
+    public int NewOversLimit { get; set; }
+}
+
 public class NewBatterRequest
 {
     public int PlayerId { get; set; }
+
+    /// <summary>
+    /// Whether the incoming batter faces the next ball. Null keeps the end the engine worked out
+    /// (the one left empty); true or false puts the new batter on or off strike regardless.
+    /// </summary>
+    public bool? OnStrike { get; set; }
 }
 
 public class NewBowlerRequest

@@ -244,6 +244,19 @@ public static class DismissalRules
         _ => false
     };
 
+    /// <summary>
+    /// Most dismissals only befall the batter facing. A run-out or obstruction can take either,
+    /// and either batter can retire.
+    /// </summary>
+    public static bool CanDismissNonStriker(DismissalType type) => type switch
+    {
+        DismissalType.RunOut => true,
+        DismissalType.ObstructingTheField => true,
+        DismissalType.RetiredHurt => true,
+        DismissalType.RetiredOut => true,
+        _ => false
+    };
+
     /// <summary>Retiring hurt costs the side nothing; the batter can come back later in the innings.</summary>
     public static bool CountsAsWicket(DismissalType type) => type != DismissalType.RetiredHurt;
 

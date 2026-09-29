@@ -31,6 +31,7 @@ public interface ICricketScoringService
     Task<CricketResult<CricketMatch>> SetBatterAsync(int matchId, NewBatterRequest request);
     Task<CricketResult<CricketMatch>> SetBowlerAsync(int matchId, NewBowlerRequest request);
     Task<CricketResult<CricketMatch>> EndInningsAsync(int matchId, EndInningsRequest request);
+    Task<CricketResult<CricketMatch>> ReduceOversAsync(int matchId, ReduceOversRequest request);
     Task<CricketResult<CricketMatch>> EnforceFollowOnAsync(int matchId);
     Task<CricketResult<CricketMatch>> StartSuperOverAsync(int matchId);
     Task<CricketResult<CricketMatch>> CompleteAsync(int matchId, CompleteCricketMatchRequest request);

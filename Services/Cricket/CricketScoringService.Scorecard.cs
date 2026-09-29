@@ -75,7 +75,7 @@ public partial class CricketScoringService
         return card;
     }
 
-    private static List<BattingCardRow> BuildBattingCard(
+    internal static List<BattingCardRow> BuildBattingCard(
         CricketMatch match, CricketInnings innings, List<CricketBall> balls)
     {
         // Order of arrival at the crease, which is the order a scorecard reads in — not the order
@@ -160,7 +160,9 @@ public partial class CricketScoringService
                 : $"c {fielder ?? "?"} b {bowler}",
             DismissalType.Stumped => $"st {fielder ?? "?"} b {bowler}",
             DismissalType.HitWicket => $"hit wicket b {bowler}",
-            DismissalType.RunOut => fielder is null ? "run out" : $"run out ({fielder})",
+            DismissalType.RunOut => fielder is null ? "run out"
+                : ball.RunOutReceiverId is int r ? $"run out ({fielder}/{NameOf(match, r)})"
+                : $"run out ({fielder})",
             DismissalType.RetiredHurt => "retired hurt",
             DismissalType.RetiredOut => "retired out",
             DismissalType.ObstructingTheField => "obstructing the field",
@@ -170,7 +172,7 @@ public partial class CricketScoringService
         };
     }
 
-    private static List<BowlingCardRow> BuildBowlingCard(
+    internal static List<BowlingCardRow> BuildBowlingCard(
         CricketMatch match, CricketInnings innings, List<CricketBall> balls)
     {
         return balls
@@ -197,7 +199,7 @@ public partial class CricketScoringService
     /// A maiden is a completed over that cost the bowler nothing. Byes keep it alive, because they
     /// were never charged to the bowler in the first place.
     /// </summary>
-    private static int CountMaidens(IEnumerable<CricketBall> bowlerBalls, int ballsPerOver) =>
+    internal static int CountMaidens(IEnumerable<CricketBall> bowlerBalls, int ballsPerOver) =>
         bowlerBalls
             .GroupBy(b => b.OverNumber)
             .Count(over => over.Count(b => b.IsLegalDelivery) == ballsPerOver

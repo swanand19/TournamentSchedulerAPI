@@ -43,7 +43,8 @@ public partial class CricketScoringService
             ResultSummary = match.ResultSummary,
             Squad = match.Squad.Select(ToMember).ToList(),
             Innings = match.Innings.OrderBy(i => i.InningsNumber).Select(ToSummary).ToList(),
-            Current = live
+            Current = live,
+            Dls = BuildDlsState(match)
         };
 
         state.Actions = BuildActions(match, innings);
@@ -207,9 +208,12 @@ public partial class CricketScoringService
             NeedsBowler = innings?.NeedsBowler ?? false,
             CanEndInnings = innings is { Status: InningsStatus.InProgress },
             CanDeclare = innings is { Status: InningsStatus.InProgress } && match.Rules.IsMultiInnings,
-            CanStartSuperOver = match.Status == CricketMatchStatus.SuperOver && !inningsInProgress,
+            // A new super over only between pairs, never halfway through one.
+            CanStartSuperOver = match.Status == CricketMatchStatus.SuperOver && !inningsInProgress
+                                && match.Innings.Count(i => i.IsSuperOver) % 2 == 0,
             CanComplete = !over,
-            CanEnforceFollowOn = CanEnforceFollowOn(match)
+            CanEnforceFollowOn = CanEnforceFollowOn(match),
+            CanReduceOvers = innings is { Status: InningsStatus.InProgress, IsSuperOver: false, OversLimit: > 1 }
         };
 
         if (actions.CanStartInnings && match.TeamBattingFirstId.HasValue)
