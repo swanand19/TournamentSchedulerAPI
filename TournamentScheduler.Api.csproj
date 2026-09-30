@@ -17,6 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The gateway's key derivation is checked against the RFC's worked example. -->
+    <InternalsVisibleTo Include="TournamentScheduler.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Stored procedure SQL, applied by migrations via migrationBuilder.SqlFile("name.sql"). -->
     <EmbeddedResource Include="Data\StoredProcedures\Sql\**\*.sql" />
   </ItemGroup>

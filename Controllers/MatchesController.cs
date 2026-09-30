@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using TournamentScheduler.Api.Gateway;
 using TournamentScheduler.Api.Http;
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Services.Football;
@@ -17,72 +18,86 @@ public class MatchesController : ApiController
     }
 
     // GET api/matches/5
-    [HttpGet("{id}")]
-    public async Task<ActionResult<ApiResponse<object>>> GetMatch(int id) =>
-        Respond(await _football.GetMatch(id));
+    [HttpGet("{matchId}")]
+    [ServiceRequestId("MATCH_GET")]
+    public async Task<ActionResult<ApiResponse<object>>> GetMatch(int matchId) =>
+        Respond(await _football.GetMatch(matchId));
 
     // POST api/matches/5/setup — configures the match and immediately starts it
-    [HttpPost("{id}/setup")]
-    public async Task<ActionResult<ApiResponse<object>>> SetupAndStart(int id, [FromBody] StartMatchRequest request) =>
-        Respond(await _football.SetupAndStart(id, request));
+    [HttpPost("{matchId}/setup")]
+    [ServiceRequestId("MATCH_SETUP")]
+    public async Task<ActionResult<ApiResponse<object>>> SetupAndStart(int matchId, [FromBody] StartMatchRequest request) =>
+        Respond(await _football.SetupAndStart(matchId, request));
 
     // POST api/matches/5/events — register a goal, card, or substitution
-    [HttpPost("{id}/events")]
-    public async Task<ActionResult<ApiResponse<object>>> RecordEvent(int id, [FromBody] RecordEventRequest request) =>
-        Respond(await _football.RecordEvent(id, request));
+    [HttpPost("{matchId}/events")]
+    [ServiceRequestId("MATCH_EVENT_RECORD")]
+    public async Task<ActionResult<ApiResponse<object>>> RecordEvent(int matchId, [FromBody] RecordEventRequest request) =>
+        Respond(await _football.RecordEvent(matchId, request));
 
     // GET api/matches/5/events — full timeline, oldest first
-    [HttpGet("{id}/events")]
-    public async Task<ActionResult<ApiResponse<object>>> GetEvents(int id) =>
-        Respond(await _football.GetEvents(id));
+    [HttpGet("{matchId}/events")]
+    [ServiceRequestId("MATCH_EVENTS")]
+    public async Task<ActionResult<ApiResponse<object>>> GetEvents(int matchId) =>
+        Respond(await _football.GetEvents(matchId));
 
     // POST api/matches/5/clock/pause — stop play mid-period (injury, incident). The period is NOT over.
-    [HttpPost("{id}/clock/pause")]
-    public async Task<ActionResult<ApiResponse<object>>> PauseClock(int id) =>
-        Respond(await _football.PauseClock(id));
+    [HttpPost("{matchId}/clock/pause")]
+    [ServiceRequestId("MATCH_CLOCK_PAUSE")]
+    public async Task<ActionResult<ApiResponse<object>>> PauseClock(int matchId) =>
+        Respond(await _football.PauseClock(matchId));
 
     // POST api/matches/5/clock/resume — restart play after a mid-period stoppage.
-    [HttpPost("{id}/clock/resume")]
-    public async Task<ActionResult<ApiResponse<object>>> ResumeClock(int id) =>
-        Respond(await _football.ResumeClock(id));
+    [HttpPost("{matchId}/clock/resume")]
+    [ServiceRequestId("MATCH_CLOCK_RESUME")]
+    public async Task<ActionResult<ApiResponse<object>>> ResumeClock(int matchId) =>
+        Respond(await _football.ResumeClock(matchId));
 
     // POST api/matches/5/clock/add-time
-    [HttpPost("{id}/clock/add-time")]
-    public async Task<ActionResult<ApiResponse<object>>> AddTime(int id, [FromBody] AddTimeRequest request) =>
-        Respond(await _football.AddTime(id, request));
+    [HttpPost("{matchId}/clock/add-time")]
+    [ServiceRequestId("MATCH_CLOCK_ADD_TIME")]
+    public async Task<ActionResult<ApiResponse<object>>> AddTime(int matchId, [FromBody] AddTimeRequest request) =>
+        Respond(await _football.AddTime(matchId, request));
 
     // POST api/matches/5/half/end — the referee's whistle for the end of the current period.
-    [HttpPost("{id}/half/end")]
-    public async Task<ActionResult<ApiResponse<object>>> EndPeriod(int id) =>
-        Respond(await _football.EndPeriod(id));
+    [HttpPost("{matchId}/half/end")]
+    [ServiceRequestId("MATCH_PERIOD_END")]
+    public async Task<ActionResult<ApiResponse<object>>> EndPeriod(int matchId) =>
+        Respond(await _football.EndPeriod(matchId));
 
     // POST api/matches/5/half/next — kick off the next period. Requires the current one to be ended.
-    [HttpPost("{id}/half/next")]
-    public async Task<ActionResult<ApiResponse<object>>> NextHalf(int id) =>
-        Respond(await _football.NextHalf(id));
+    [HttpPost("{matchId}/half/next")]
+    [ServiceRequestId("MATCH_PERIOD_NEXT")]
+    public async Task<ActionResult<ApiResponse<object>>> NextHalf(int matchId) =>
+        Respond(await _football.NextHalf(matchId));
 
     // POST api/matches/5/complete
-    [HttpPost("{id}/complete")]
-    public async Task<ActionResult<ApiResponse<object>>> CompleteMatch(int id, [FromBody] CompleteMatchRequest? request = null) =>
-        Respond(await _football.CompleteMatch(id, request));
+    [HttpPost("{matchId}/complete")]
+    [ServiceRequestId("MATCH_COMPLETE")]
+    public async Task<ActionResult<ApiResponse<object>>> CompleteMatch(int matchId, [FromBody] CompleteMatchRequest? request = null) =>
+        Respond(await _football.CompleteMatch(matchId, request));
 
     // POST api/matches/5/penalties/start
-    [HttpPost("{id}/penalties/start")]
-    public async Task<ActionResult<ApiResponse<object>>> StartPenalties(int id, [FromBody] StartPenaltiesRequest request) =>
-        Respond(await _football.StartPenalties(id, request));
+    [HttpPost("{matchId}/penalties/start")]
+    [ServiceRequestId("MATCH_PENALTIES_START")]
+    public async Task<ActionResult<ApiResponse<object>>> StartPenalties(int matchId, [FromBody] StartPenaltiesRequest request) =>
+        Respond(await _football.StartPenalties(matchId, request));
 
     // GET api/matches/5/penalties
-    [HttpGet("{id}/penalties")]
-    public async Task<ActionResult<ApiResponse<object>>> GetPenalties(int id) =>
-        Respond(await _football.GetPenalties(id));
+    [HttpGet("{matchId}/penalties")]
+    [ServiceRequestId("MATCH_PENALTIES_GET")]
+    public async Task<ActionResult<ApiResponse<object>>> GetPenalties(int matchId) =>
+        Respond(await _football.GetPenalties(matchId));
 
     // POST api/matches/5/penalties/kick
-    [HttpPost("{id}/penalties/kick")]
-    public async Task<ActionResult<ApiResponse<object>>> RecordPenaltyKick(int id, [FromBody] RecordPenaltyKickRequest request) =>
-        Respond(await _football.RecordPenaltyKick(id, request));
+    [HttpPost("{matchId}/penalties/kick")]
+    [ServiceRequestId("MATCH_PENALTY_KICK")]
+    public async Task<ActionResult<ApiResponse<object>>> RecordPenaltyKick(int matchId, [FromBody] RecordPenaltyKickRequest request) =>
+        Respond(await _football.RecordPenaltyKick(matchId, request));
 
     // POST api/matches/5/penalties/end — manual override, declare a winner directly
-    [HttpPost("{id}/penalties/end")]
-    public async Task<ActionResult<ApiResponse<object>>> EndPenaltiesManually(int id, [FromBody] EndPenaltiesRequest request) =>
-        Respond(await _football.EndPenaltiesManually(id, request));
+    [HttpPost("{matchId}/penalties/end")]
+    [ServiceRequestId("MATCH_PENALTIES_END")]
+    public async Task<ActionResult<ApiResponse<object>>> EndPenaltiesManually(int matchId, [FromBody] EndPenaltiesRequest request) =>
+        Respond(await _football.EndPenaltiesManually(matchId, request));
 }

@@ -28,5 +28,7 @@ finally {
     if ($LASTEXITCODE -eq 0) { Remove-Item $offline -ErrorAction SilentlyContinue }
 }
 
+# Publishing restarts the app, which also reloads the gateway keys (after `gateway-keys new`, say).
+# /api/health is the one service callable without encryption. Its answer is the { status, data } envelope.
 $health = Invoke-RestMethod "http://localhost:$Port/api/health" -TimeoutSec 30
-Write-Host "Deployed. Health: $($health.status), database: $($health.database)" -ForegroundColor Green
+Write-Host "Deployed. Health: $($health.data.status), database: $($health.data.database)" -ForegroundColor Green
