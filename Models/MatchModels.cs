@@ -1,6 +1,31 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace TournamentScheduler.Api.Models;
+
+/// <summary>
+/// The scorer lock, shared by football and cricket matches: one person scores a match at a time.
+/// Whoever sets it up holds it; others ask (or an owner takes over); it stops mattering once the
+/// match is over. See docs/accounts-and-access-plan.md §7.
+/// </summary>
+public interface IScoredMatch
+{
+    int Id { get; }
+    int TournamentId { get; }
+    int? ActiveScorerUserId { get; set; }
+
+    /// <summary>The active scorer's app last touched the match (moved on at most every 30 s).</summary>
+    DateTime? ScorerLastSeenAt { get; set; }
+
+    int? ScoringRequestedByUserId { get; set; }
+    DateTime? ScoringRequestedAt { get; set; }
+
+    /// <summary>Over — finished or abandoned — so the lock no longer applies.</summary>
+    bool IsOver { get; }
+
+    /// <summary>Started and not over: may still be finished after the tournament is completed.</summary>
+    bool IsInPlay { get; }
+}
 
 public enum MatchStatus
 {
@@ -60,9 +85,18 @@ public enum MatchEventType
     MatchAbandoned = 14
 }
 
-public class Match
+public class Match : IScoredMatch
 {
     public int Id { get; set; }
+
+    // The scorer lock (see IScoredMatch). Not sent as they are: answers carry `scoring` instead.
+    [JsonIgnore] public int? ActiveScorerUserId { get; set; }
+    [JsonIgnore] public DateTime? ScorerLastSeenAt { get; set; }
+    [JsonIgnore] public int? ScoringRequestedByUserId { get; set; }
+    [JsonIgnore] public DateTime? ScoringRequestedAt { get; set; }
+
+    /// <summary>Who is scoring and what the caller may do about it — filled in per request.</summary>
+    [NotMapped] public Accounts.ScoringDto? Scoring { get; set; }
 
     public int TournamentId { get; set; }
     public Tournament? Tournament { get; set; }
@@ -136,6 +170,13 @@ public class Match
 
     [NotMapped]
     public bool ScoresLevel => HomeScore == AwayScore;
+
+    // The scorer lock's view of the match (IScoredMatch). Not sent: `scoring` says what matters.
+    [NotMapped, JsonIgnore]
+    public bool IsOver => Status == MatchStatus.Completed;
+
+    [NotMapped, JsonIgnore]
+    public bool IsInPlay => Status is MatchStatus.InProgress or MatchStatus.Paused or MatchStatus.PenaltyShootout;
 
     /// <summary>
     /// Whether extra time can still be reached. Only when it is enabled, draws are not allowed,

@@ -77,6 +77,7 @@ public sealed class ActivityLogMiddleware(
             {
                 RequestUUID = log.RequestUUID,
                 SessionId = log.SessionId,
+                UserId = log.UserId, // set further in by the session check, which has run by now
                 JourneyId = log.JourneyId,
                 DeviceId = log.DeviceId,
                 Channel = log.Channel,

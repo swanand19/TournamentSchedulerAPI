@@ -75,6 +75,13 @@ public sealed class GatewayMiddleware(
         }
         finally
         {
+            // Who it turned out to be, from the sealed token — not the clear header's sessionId, which anyone can write.
+            if (RequestLogContext.Of(context) is { UserId: not null } request)
+            {
+                log.UserId = request.UserId;
+                log.SessionId = request.SessionId;
+            }
+
             log.HttpStatusCode = context.Response.StatusCode;
             log.EndDate = clock.GetUtcNow().UtcDateTime;
             log.DurationMs = (int)timer.ElapsedMilliseconds;
@@ -253,9 +260,9 @@ public sealed class GatewayMiddleware(
         await Dispatch(context, header, service, target, key);
     }
 
-    private sealed record Target(string Path, QueryString Query, byte[] Body);
+    private sealed record Target(string Path, QueryString Query, byte[] Body, string? Session);
 
-    /// <summary>The decrypted <c>{ routeParams, query, body }</c>, turned into the action's URL and body.</summary>
+    /// <summary>The decrypted <c>{ routeParams, query, body, session }</c>, turned into the action's URL and body, and the session token.</summary>
     private static (Target? Target, string? Error) ReadPayload(byte[] plaintext, ServiceDescriptor service)
     {
         JsonDocument document;
@@ -313,7 +320,15 @@ public sealed class GatewayMiddleware(
                 ? Encoding.UTF8.GetBytes(bodyValue.GetRawText())
                 : [];
 
-            return (new Target(path, QueryString.Create(query), body), null);
+            string? session = null;
+            if (root.TryGetProperty(GatewayPayload.Session, out var sessionValue) && sessionValue.ValueKind != JsonValueKind.Null)
+            {
+                if (sessionValue.ValueKind != JsonValueKind.String)
+                    return (null, "session must be text.");
+                session = sessionValue.GetString();
+            }
+
+            return (new Target(path, QueryString.Create(query), body, session), null);
         }
     }
 
@@ -328,7 +343,7 @@ public sealed class GatewayMiddleware(
 
     private async Task Dispatch(HttpContext context, GatewayRequestHeader header, ServiceDescriptor service, Target target, byte[] key)
     {
-        context.Features.Set(new GatewayRequestFeature(header, service));
+        context.Features.Set(new GatewayRequestFeature(header, service, target.Session));
 
         var request = context.Request;
         request.Method = service.HttpMethod;

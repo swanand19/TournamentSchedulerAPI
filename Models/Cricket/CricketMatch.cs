@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace TournamentScheduler.Api.Models.Cricket;
 
 /// <summary>
@@ -5,9 +7,19 @@ namespace TournamentScheduler.Api.Models.Cricket;
 /// so a tournament's fixtures materialise and list the same way whichever sport it is played under;
 /// everything below <see cref="Rules"/> is where the two diverge.
 /// </summary>
-public class CricketMatch
+public class CricketMatch : IScoredMatch
 {
     public int Id { get; set; }
+
+    // The scorer lock (see IScoredMatch).
+    [JsonIgnore] public int? ActiveScorerUserId { get; set; }
+    [JsonIgnore] public DateTime? ScorerLastSeenAt { get; set; }
+    [JsonIgnore] public int? ScoringRequestedByUserId { get; set; }
+    [JsonIgnore] public DateTime? ScoringRequestedAt { get; set; }
+
+    [JsonIgnore] public bool IsOver => Status is CricketMatchStatus.Completed or CricketMatchStatus.Abandoned;
+
+    [JsonIgnore] public bool IsInPlay => Status is CricketMatchStatus.InProgress or CricketMatchStatus.InningsBreak or CricketMatchStatus.SuperOver;
 
     public int TournamentId { get; set; }
     public Tournament? Tournament { get; set; }

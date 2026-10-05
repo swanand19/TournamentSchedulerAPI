@@ -22,6 +22,431 @@ namespace TournamentScheduler.Api.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.OtpChallenge", b =>
+                {
+                    b.Property<long>("OtpChallengeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("OtpChallengeId"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("ClientIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeviceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.HasKey("OtpChallengeId");
+
+                    b.HasIndex("ClientIp", "Crd");
+
+                    b.HasIndex("DeviceId", "Crd");
+
+                    b.HasIndex("Target", "Crd");
+
+                    b.ToTable("OtpChallenges", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.Permission", b =>
+                {
+                    b.Property<int>("PermissionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PermissionId"));
+
+                    b.Property<string>("ActionName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ControllerName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("HttpMethod")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<bool>("IsAdminOnly")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsAnonymous")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsObsolete")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsProtected")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ServiceRequestId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("URL")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.HasKey("PermissionId");
+
+                    b.HasIndex("ServiceRequestId")
+                        .IsUnique();
+
+                    b.ToTable("Permissions", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.Role", b =>
+                {
+                    b.Property<int>("RoleId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("RoleId"));
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RoleName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("RoleId");
+
+                    b.HasIndex("RoleName")
+                        .IsUnique();
+
+                    b.ToTable("Roles", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            RoleId = 1,
+                            Crd = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CrdBy = 1,
+                            Description = "Runs the admin portal.",
+                            IsDisabled = false,
+                            Lmd = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            LmdBy = 1,
+                            RoleName = "Admin"
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            Crd = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CrdBy = 1,
+                            Description = "Everyone who signs up in the apps.",
+                            IsDisabled = false,
+                            Lmd = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            LmdBy = 1,
+                            RoleName = "EndUser"
+                        });
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.RolePermission", b =>
+                {
+                    b.Property<int>("RolePermissionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("RolePermissionId"));
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.HasKey("RolePermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.HasIndex("RoleId", "PermissionId")
+                        .IsUnique();
+
+                    b.ToTable("RolePermissions", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.TournamentMember", b =>
+                {
+                    b.Property<int>("TournamentMemberId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TournamentMemberId"));
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MemberRole")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("TournamentMemberId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TournamentId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("TournamentMembers", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.User", b =>
+                {
+                    b.Property<int>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("UserId"));
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DeletedOn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EmailId")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime?>("EmailVerifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("EmailId")
+                        .IsUnique()
+                        .HasFilter("[EmailId] IS NOT NULL");
+
+                    b.HasIndex("PhoneNumber")
+                        .IsUnique()
+                        .HasFilter("[PhoneNumber] IS NOT NULL");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("Users", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            UserId = 1,
+                            Crd = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CrdBy = 1,
+                            IsDisabled = false,
+                            Lmd = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            LmdBy = 1,
+                            Name = "System",
+                            RoleId = 1
+                        });
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.UserCricketProfile", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("BattingOrderPreference")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("BattingStyle")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("BowlingArm")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("BowlingType")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PrimaryRole")
+                        .HasColumnType("int");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserCricketProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.UserSession", b =>
+                {
+                    b.Property<Guid>("SessionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Channel")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeviceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RevokedReason")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("SessionId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserSessions", (string)null);
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketBall", b =>
                 {
                     b.Property<int>("Id")
@@ -280,6 +705,9 @@ namespace TournamentScheduler.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ActiveScorerUserId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("AwayTeamId")
                         .HasColumnType("int");
 
@@ -329,6 +757,15 @@ namespace TournamentScheduler.Api.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("SavedFixtureId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ScorerLastSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ScoringRequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ScoringRequestedByUserId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("StartedAt")
@@ -480,6 +917,9 @@ namespace TournamentScheduler.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ActiveScorerUserId")
+                        .HasColumnType("int");
+
                     b.Property<int>("AwayScore")
                         .HasColumnType("int");
 
@@ -583,6 +1023,15 @@ namespace TournamentScheduler.Api.Migrations
                         .HasColumnType("bit");
 
                     b.Property<int>("SavedFixtureId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ScorerLastSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ScoringRequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ScoringRequestedByUserId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("StartedAt")
@@ -733,6 +1182,10 @@ namespace TournamentScheduler.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("EmailId")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<int?>("JerseyNumber")
                         .HasColumnType("int");
 
@@ -740,20 +1193,31 @@ namespace TournamentScheduler.Api.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int?>("PersonId")
-                        .HasColumnType("int");
-
                     b.Property<string>("Position")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("TeamId")
                         .HasColumnType("int");
 
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("EmailId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("TeamId", "JerseyNumber")
                         .IsUnique()
                         .HasFilter("[JerseyNumber] IS NOT NULL");
+
+                    b.HasIndex("TournamentId", "UserId")
+                        .IsUnique()
+                        .HasFilter("[UserId] IS NOT NULL");
 
                     b.ToTable("Players");
                 });
@@ -862,6 +1326,11 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<int?>("DefaultCaptainPlayerId")
                         .HasColumnType("int");
 
+                    b.Property<string>("JoinCode")
+                        .HasMaxLength(6)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(6)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
@@ -870,6 +1339,10 @@ namespace TournamentScheduler.Api.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("JoinCode")
+                        .IsUnique()
+                        .HasFilter("[JoinCode] IS NOT NULL");
 
                     b.HasIndex("TournamentId", "Name")
                         .IsUnique();
@@ -885,8 +1358,22 @@ namespace TournamentScheduler.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CompletedByUserId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
 
                     b.Property<bool>("IsStarted")
                         .HasColumnType("bit");
@@ -898,12 +1385,90 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<int>("Sport")
                         .HasColumnType("int");
 
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasDefaultValue("Asia/Kolkata");
+
                     b.HasKey("Id");
 
+                    b.HasIndex("Status", "EndDate");
+
                     b.ToTable("Tournaments");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.RolePermission", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.Permission", null)
+                        .WithMany()
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.TournamentMember", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Tournament", null)
+                        .WithMany()
+                        .HasForeignKey("TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.User", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.Role", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.UserCricketProfile", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", null)
+                        .WithOne()
+                        .HasForeignKey("TournamentScheduler.Api.Models.Accounts.UserCricketProfile", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.UserSession", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketBall", b =>
@@ -1196,7 +1761,14 @@ namespace TournamentScheduler.Api.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Team");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.SavedFixture", b =>

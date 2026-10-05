@@ -43,6 +43,7 @@ public sealed class ErrorLogProvider(LogQueue queue, IHttpContextAccessor http, 
             {
                 Crd = provider.Clock.GetUtcNow().UtcDateTime,
                 RequestUUID = request?.RequestUUID,
+                UserId = request?.UserId,
                 ServiceRequestId = request?.ServiceRequestId,
                 Url = request?.Url ?? (context is null ? null : context.Request.Path + context.Request.QueryString),
                 RequestJson = request?.RequestJson,

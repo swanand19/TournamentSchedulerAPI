@@ -14,7 +14,12 @@ public sealed class RequestLogContext
     public bool ViaGateway { get; set; }
     public string? ServiceRequestId { get; set; }
     public string? JourneyId { get; set; }
+    /// <summary>The header's sessionId until the session check runs; then the session the token really belongs to.</summary>
     public string? SessionId { get; set; }
+
+    /// <summary>The signed-in user, once the session check has found one. Null for anonymous calls.</summary>
+    public int? UserId { get; set; }
+
     public string? DeviceId { get; set; }
     public string? Channel { get; set; }
 

@@ -73,6 +73,9 @@ namespace TournamentScheduler.Api.Logging.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("nvarchar(2048)");
 
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
                     b.HasKey("ErrorLogId");
 
                     b.HasIndex("Crd");
@@ -156,6 +159,9 @@ namespace TournamentScheduler.Api.Logging.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("nvarchar(2048)");
 
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
                     b.Property<bool>("ViaGateway")
                         .HasColumnType("bit");
 
@@ -164,6 +170,8 @@ namespace TournamentScheduler.Api.Logging.Migrations
                     b.HasIndex("RequestUUID");
 
                     b.HasIndex("StartDate");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("MBActivityLogs", (string)null);
                 });
@@ -232,6 +240,9 @@ namespace TournamentScheduler.Api.Logging.Migrations
 
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("datetime2(3)");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
 
                     b.HasKey("MBMiddlewareLogId");
 

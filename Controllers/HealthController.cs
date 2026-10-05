@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using TournamentScheduler.Api.Auth.TournamentAccess;
+using TournamentScheduler.Api.Auth;
 using TournamentScheduler.Api.Gateway;
 using TournamentScheduler.Api.Http;
 using TournamentScheduler.Api.Services;
@@ -16,6 +18,7 @@ namespace TournamentScheduler.Api.Controllers;
 [ApiController]
 [Route("api/health")]
 [SkipEncryption]
+[NotTournamentScoped]
 public class HealthController : ApiController
 {
     private readonly IHealthService _health;
@@ -30,6 +33,7 @@ public class HealthController : ApiController
     // GET api/health — 200 when the API and database both answer, 503 when the database doesn't
     [HttpGet]
     [ServiceRequestId("HEALTH_CHECK")]
+    [AllowAnonymousService] // the Server sheet tests the connection before anyone signs in
     public async Task<ActionResult<ApiResponse<object>>> Get()
     {
         var database = await _health.DatabaseReachableAsync();

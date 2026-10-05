@@ -16,6 +16,10 @@ public class MBMiddlewareLog
     public string? ServiceRequestId { get; set; }
     public string? JourneyId { get; set; }
     public string? SessionId { get; set; }
+
+    /// <summary>Who was signed in; null when nobody was (sign-in itself, refusals before decryption).</summary>
+    public int? UserId { get; set; }
+
     public string? DeviceId { get; set; }
     public string? Channel { get; set; }
     public string? AppVersion { get; set; }
@@ -44,6 +48,7 @@ public class MBActivityLog
     public long MBActivityLogId { get; set; }
     public Guid RequestUUID { get; set; }
     public string? SessionId { get; set; }
+    public int? UserId { get; set; }
     public string? JourneyId { get; set; }
     public string? DeviceId { get; set; }
     public string? Channel { get; set; }
@@ -81,6 +86,9 @@ public class ErrorLog
     /// <summary>Null for errors outside any request (start-up, background work).</summary>
     public Guid? RequestUUID { get; set; }
 
+    /// <summary>Who was signed in, when it happened inside a signed-in request.</summary>
+    public int? UserId { get; set; }
+
     public string? ServiceRequestId { get; set; }
     public string? Url { get; set; }
 
@@ -107,8 +115,8 @@ public class ErrorLog
 }
 
 /// <summary>
-/// Calls the API makes to third-party services. Nothing writes to it yet — it is here so the first
-/// integration logs the same way from day one. See Logging/README.md.
+/// Calls the API makes to third-party services — today the email server that delivers sign-in
+/// codes (never the code itself). Written through <see cref="RemoteCallRecorder"/>. See Logging/README.md.
 /// </summary>
 public class RemoteLog
 {

@@ -34,7 +34,7 @@ public sealed class LogStoreOptions
     public List<string> MaskedFields { get; set; } =
     [
         "password", "newPassword", "oldPassword", "confirmPassword", "pin", "mpin", "otp",
-        "token", "accessToken", "refreshToken", "secret", "apiKey", "authorization", "cvv"
+        "token", "accessToken", "refreshToken", "sessionToken", "session", "secret", "apiKey", "authorization", "cvv"
     ];
 
     /// <summary>Entries waiting to be written. Beyond this, new entries are dropped and counted.</summary>

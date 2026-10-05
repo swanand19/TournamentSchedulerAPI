@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using TournamentScheduler.Api.Models;
+using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
 
 namespace TournamentScheduler.Api.Data;
@@ -25,9 +26,19 @@ public class TournamentDbContext : DbContext
     public DbSet<CricketBall> CricketBalls => Set<CricketBall>();
     public DbSet<CricketMatchEvent> CricketMatchEvents => Set<CricketMatchEvent>();
     public DbSet<CricketInterruption> CricketInterruptions => Set<CricketInterruption>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<OtpChallenge> OtpChallenges => Set<OtpChallenge>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<TournamentMember> TournamentMembers => Set<TournamentMember>();
+    public DbSet<UserCricketProfile> UserCricketProfiles => Set<UserCricketProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ConfigureAccounts(modelBuilder);
+
         modelBuilder.Entity<SavedSchedule>()
             .HasMany(s => s.Groups)
             .WithOne(g => g.SavedSchedule)
@@ -221,5 +232,162 @@ public class TournamentDbContext : DbContext
         modelBuilder.Entity<CricketBall>()
             .HasIndex(b => new { b.InningsId, b.SequenceNumber })
             .IsUnique();
+    }
+
+    // --- Accounts ------------------------------------------------------
+    // Table and column names follow the team's conventions (Crd, CrdBy, Lmd, LmdBy, IsDisabled).
+    // See docs/accounts-and-access-plan.md.
+
+    /// <summary>When the seed rows were written; fixed, so the model doesn't change on every build.</summary>
+    private static readonly DateTime SeededAt = new(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private static void ConfigureAccounts(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Role>(e =>
+        {
+            e.ToTable("Roles");
+            e.HasKey(r => r.RoleId);
+            e.Property(r => r.RoleName).HasMaxLength(100).IsRequired();
+            e.Property(r => r.Description).HasMaxLength(500);
+            e.HasIndex(r => r.RoleName).IsUnique();
+            e.HasData(
+                new Role { RoleId = RoleIds.Admin, RoleName = "Admin", Description = "Runs the admin portal.", Crd = SeededAt, CrdBy = SystemUser.Id, Lmd = SeededAt, LmdBy = SystemUser.Id },
+                new Role { RoleId = RoleIds.EndUser, RoleName = "EndUser", Description = "Everyone who signs up in the apps.", Crd = SeededAt, CrdBy = SystemUser.Id, Lmd = SeededAt, LmdBy = SystemUser.Id });
+        });
+
+        modelBuilder.Entity<User>(e =>
+        {
+            e.ToTable("Users");
+            e.HasKey(u => u.UserId);
+            e.Property(u => u.Name).HasMaxLength(100).IsRequired();
+            e.Property(u => u.EmailId).HasMaxLength(256);
+            e.Property(u => u.PhoneNumber).HasMaxLength(20);
+
+            // Unique only among accounts that have one: deleted accounts all have none.
+            e.HasIndex(u => u.EmailId).IsUnique().HasFilter("[EmailId] IS NOT NULL");
+            e.HasIndex(u => u.PhoneNumber).IsUnique().HasFilter("[PhoneNumber] IS NOT NULL");
+
+            e.HasOne(u => u.Role)
+                .WithMany()
+                .HasForeignKey(u => u.RoleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasData(new User
+            {
+                UserId = SystemUser.Id,
+                Name = "System",
+                RoleId = RoleIds.Admin,
+                Crd = SeededAt,
+                CrdBy = SystemUser.Id,
+                Lmd = SeededAt,
+                LmdBy = SystemUser.Id
+            });
+        });
+
+        modelBuilder.Entity<UserSession>(e =>
+        {
+            e.ToTable("UserSessions");
+            e.HasKey(s => s.SessionId);
+            e.Property(s => s.TokenHash).HasMaxLength(64).IsUnicode(false).IsRequired();
+            e.Property(s => s.Channel).HasMaxLength(30);
+            e.Property(s => s.DeviceId).HasMaxLength(100);
+            e.Property(s => s.RevokedReason).HasMaxLength(100);
+            e.HasIndex(s => s.TokenHash).IsUnique();
+            e.HasIndex(s => s.UserId);
+
+            e.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OtpChallenge>(e =>
+        {
+            e.ToTable("OtpChallenges");
+            e.HasKey(o => o.OtpChallengeId);
+            e.Property(o => o.Purpose).HasConversion<string>().HasMaxLength(30);
+            e.Property(o => o.Channel).HasConversion<string>().HasMaxLength(20);
+            e.Property(o => o.Target).HasMaxLength(256).IsRequired();
+            e.Property(o => o.CodeHash).HasMaxLength(64).IsUnicode(false).IsRequired();
+            e.Property(o => o.DeviceId).HasMaxLength(100);
+            e.Property(o => o.ClientIp).HasMaxLength(64);
+
+            // The send limits count recent codes per email, per device and per address.
+            e.HasIndex(o => new { o.Target, o.Crd });
+            e.HasIndex(o => new { o.DeviceId, o.Crd });
+            e.HasIndex(o => new { o.ClientIp, o.Crd });
+        });
+
+        modelBuilder.Entity<Permission>(e =>
+        {
+            e.ToTable("Permissions");
+            e.HasKey(p => p.PermissionId);
+            e.Property(p => p.ServiceRequestId).HasMaxLength(100).IsRequired();
+            e.Property(p => p.ControllerName).HasMaxLength(100).IsRequired();
+            e.Property(p => p.ActionName).HasMaxLength(100).IsRequired();
+            e.Property(p => p.HttpMethod).HasMaxLength(10).IsRequired();
+            e.Property(p => p.URL).HasMaxLength(300).IsRequired();
+            e.HasIndex(p => p.ServiceRequestId).IsUnique();
+        });
+
+        modelBuilder.Entity<RolePermission>(e =>
+        {
+            e.ToTable("RolePermissions");
+            e.HasKey(rp => rp.RolePermissionId);
+            e.HasIndex(rp => new { rp.RoleId, rp.PermissionId }).IsUnique();
+
+            e.HasOne<Role>().WithMany().HasForeignKey(rp => rp.RoleId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Permission>().WithMany().HasForeignKey(rp => rp.PermissionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // --- Who may do what in a tournament (phase 3) ---------------------
+
+        modelBuilder.Entity<Tournament>(e =>
+        {
+            // Existing tournaments belong to System until someone takes them over (deploy/sql/04-…).
+            e.Property(t => t.CreatedByUserId).HasDefaultValue(SystemUser.Id);
+            e.Property(t => t.TimeZoneId).HasMaxLength(64).IsRequired().HasDefaultValue(Tournament.DefaultTimeZoneId);
+            e.HasIndex(t => new { t.Status, t.EndDate }); // the hourly completion job
+        });
+
+        modelBuilder.Entity<TournamentMember>(e =>
+        {
+            e.ToTable("TournamentMembers");
+            e.HasKey(m => m.TournamentMemberId);
+            e.Property(m => m.MemberRole).HasConversion<string>().HasMaxLength(20);
+            e.HasIndex(m => new { m.TournamentId, m.UserId }).IsUnique();
+            e.HasIndex(m => m.UserId); // "my tournaments"
+
+            e.HasOne<Tournament>().WithMany().HasForeignKey(m => m.TournamentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(m => m.User).WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // --- Players are people (phase 4) ------------------------------------
+
+        modelBuilder.Entity<Player>(e =>
+        {
+            e.Property(p => p.EmailId).HasMaxLength(256);
+
+            // One place per person per tournament.
+            e.HasIndex(p => new { p.TournamentId, p.UserId }).IsUnique().HasFilter("[UserId] IS NOT NULL");
+            e.HasIndex(p => p.UserId);   // "tournaments I play in", renames
+            e.HasIndex(p => p.EmailId);  // linking when someone signs up
+
+            // Accounts are never deleted (they're anonymised), so this never has to cascade.
+            e.HasOne(p => p.User).WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Team>(e =>
+        {
+            e.Property(t => t.JoinCode).HasMaxLength(6).IsUnicode(false);
+            e.HasIndex(t => t.JoinCode).IsUnique().HasFilter("[JoinCode] IS NOT NULL");
+        });
+
+        modelBuilder.Entity<UserCricketProfile>(e =>
+        {
+            e.ToTable("UserCricketProfiles");
+            e.HasKey(p => p.UserId);
+            e.HasOne<User>().WithOne().HasForeignKey<UserCricketProfile>(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

@@ -68,7 +68,7 @@ public class UpdateTeamRequest
 /// leaves any existing profile untouched — a football client never sends one, and a rename from
 /// the cricket screen should not wipe a player's styles.
 /// </summary>
-public class CricketProfileInput
+public class CricketProfileInput : ICricketProfile
 {
     public CricketRole PrimaryRole { get; set; } = CricketRole.Batter;
     public BattingStyle? BattingStyle { get; set; }
@@ -83,13 +83,28 @@ public class CreatePlayerRequest
     public string? Position { get; set; }
     public int? JerseyNumber { get; set; }
     public CricketProfileInput? Cricket { get; set; }
+
+    /// <summary>
+    /// Optional: the player's sign-in email. If it has an account the place is linked to it now;
+    /// otherwise it links when they sign up.
+    /// </summary>
+    public string? Email { get; set; }
 }
 
 public class UpdatePlayerRequest
 {
+    /// <summary>Ignored once the place is linked: a linked player is shown by their account name.</summary>
     public string Name { get; set; } = string.Empty;
     public string? Position { get; set; }
     public int? JerseyNumber { get; set; }
+
+    /// <summary>
+    /// Null leaves it as it is (older apps never send it); "" clears it and unlinks the place; a
+    /// different address unlinks it and links to that one instead.
+    /// </summary>
+    public string? Email { get; set; }
+
+    /// <summary>Ignored once the place is linked: the player keeps their own profile on their account.</summary>
     public CricketProfileInput? Cricket { get; set; }
 }
 
@@ -99,10 +114,39 @@ public class CreateTournamentRequest
 
     /// <summary>Defaults to Football so existing callers that omit it keep working.</summary>
     public Sport Sport { get; set; } = Sport.Football;
+
+    /// <summary>
+    /// Optional here ("2026-10-12"): usually chosen when the schedule is approved, once the teams are
+    /// known. Both or neither. The end date decides when it completes by itself.
+    /// </summary>
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
 }
 
-public class ApproveScheduleWithTournamentRequest
+/// <summary>An owner's edit of the tournament itself, while it isn't completed.</summary>
+public class UpdateTournamentRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
+}
+
+/// <summary>A request body that names its tournament — how the access check finds it when the route doesn't.</summary>
+public interface ITournamentScopedRequest
+{
+    int TournamentId { get; }
+}
+
+public class ApproveScheduleWithTournamentRequest : ITournamentScopedRequest
 {
     public int TournamentId { get; set; }
+
+    /// <summary>
+    /// The tournament's dates, settled together with its fixtures. Required unless the tournament
+    /// already has them; sending them again changes them.
+    /// </summary>
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
+
     public TournamentSchedule Schedule { get; set; } = new();
 }

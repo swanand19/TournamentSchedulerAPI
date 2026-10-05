@@ -54,6 +54,7 @@ public class LogDbContext(DbContextOptions<LogDbContext> options) : DbContext(op
             e.Property(x => x.EndDate).HasColumnType("datetime2(3)");
             e.HasIndex(x => x.RequestUUID);
             e.HasIndex(x => x.StartDate);
+            e.HasIndex(x => x.UserId); // "everything this person did"
         });
 
         modelBuilder.Entity<ErrorLog>(e =>

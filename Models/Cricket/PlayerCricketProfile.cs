@@ -7,11 +7,11 @@ namespace TournamentScheduler.Api.Models.Cricket;
 /// The cricketing half of a player: what they are, how they bat, how they bowl.
 ///
 /// A separate table rather than columns on <see cref="Player"/> so <see cref="Player"/> stays
-/// sport-neutral — a football squad carries none of these — and so that when players sign in for
-/// themselves this is the table handed to them to own. Every field below is something the player
-/// is the authority on, which is exactly the boundary sign-in will need.
+/// sport-neutral — a football squad carries none of these. Once the squad place is linked to an
+/// account, the person owns these fields (<see cref="UserCricketProfile"/>) and this row is kept a
+/// copy of theirs, so everything that reads a squad's styles keeps working unchanged.
 /// </summary>
-public class PlayerCricketProfile
+public class PlayerCricketProfile : ICricketProfile
 {
     /// <summary>Primary key as well as the foreign key: one profile per player, at most.</summary>
     public int PlayerId { get; set; }

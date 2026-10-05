@@ -39,7 +39,11 @@ public sealed class GatewayRequestHeader
     [JsonPropertyName("journeyId")]
     public string? JourneyId { get; set; }
 
-    /// <summary>Reserved for sign-in. Always null today.</summary>
+    /// <summary>
+    /// The signed-in device's session id, as sign-in returned it. Not secret and not trusted: it only
+    /// groups a device's requests in the logs. The secret token travels sealed, in the payload's
+    /// <c>session</c>; the logs record the session that token actually belongs to.
+    /// </summary>
     [JsonPropertyName("sessionId")]
     public string? SessionId { get; set; }
 
@@ -95,24 +99,29 @@ public sealed class GatewayResponseHeader
 }
 
 /// <summary>
-/// What a request carries once decrypted: the values for the action's route, its query string, and
-/// its body exactly as the action would receive it on its own URL.
-/// <code>{ "routeParams": { "matchId": 42 }, "query": { "sport": "Cricket" }, "body": { ... } }</code>
+/// What a request carries once decrypted: the values for the action's route, its query string, its
+/// body exactly as the action would receive it on its own URL, and — once signed in — the session
+/// token, which is why it is only ever sent sealed.
+/// <code>{ "routeParams": { "matchId": 42 }, "query": { "sport": "Cricket" }, "body": { ... }, "session": "k7Qm…" }</code>
 /// </summary>
 public static class GatewayPayload
 {
     public const string RouteParams = "routeParams";
     public const string Query = "query";
     public const string Body = "body";
+    public const string Session = "session";
 }
 
 /// <summary>
 /// The request as the gateway accepted it, attached to the HTTP context. Its presence is what marks
-/// a request as having come through the gateway; later, session and authorisation checks read the
-/// header from here rather than from anything the action receives.
+/// a request as having come through the gateway; the session check reads the token from here rather
+/// than from anything the action receives.
 /// </summary>
-public sealed class GatewayRequestFeature(GatewayRequestHeader header, ServiceDescriptor service)
+public sealed class GatewayRequestFeature(GatewayRequestHeader header, ServiceDescriptor service, string? sessionToken = null)
 {
     public GatewayRequestHeader Header { get; } = header;
     public ServiceDescriptor Service { get; } = service;
+
+    /// <summary>The payload's <c>session</c>: null when the app isn't signed in.</summary>
+    public string? SessionToken { get; } = sessionToken;
 }

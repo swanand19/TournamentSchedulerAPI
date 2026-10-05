@@ -61,6 +61,7 @@ public static class ApiResponses
         405 => "That action isn't allowed here.",
         409 => "The request conflicts with the current state. Reload and try again.",
         415 => "The request body must be JSON.",
+        429 => "Too many requests. Wait a moment and try again.",
         503 => "The service is unavailable right now. Try again shortly.",
         >= 500 => "Something went wrong on the server. Try again shortly.",
         _ => $"The request could not be completed ({statusCode})."

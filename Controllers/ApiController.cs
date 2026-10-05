@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using TournamentScheduler.Api.Auth;
 using TournamentScheduler.Api.Services;
 
 namespace TournamentScheduler.Api.Controllers;
@@ -23,6 +24,12 @@ public abstract class ApiController : ControllerBase
             ServiceOutcome.Ok => onSuccess != null ? onSuccess(result.Value!) : Ok(result.Value),
             ServiceOutcome.NotFound => result.Error == null ? NotFound() : NotFound(result.Error),
             ServiceOutcome.Conflict => Conflict(result.Error),
+            ServiceOutcome.Forbidden => StatusCode(StatusCodes.Status403Forbidden, result.Error),
+            ServiceOutcome.TooManyRequests => StatusCode(StatusCodes.Status429TooManyRequests, result.Error),
+            ServiceOutcome.Unavailable => StatusCode(StatusCodes.Status503ServiceUnavailable, result.Error),
             _ => BadRequest(result.Error)
         };
+
+    /// <summary>Which app, install and address the request came from (from the gateway header).</summary>
+    protected ClientInfo Client => ClientInfo.From(HttpContext);
 }

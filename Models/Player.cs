@@ -1,11 +1,21 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
 
 namespace TournamentScheduler.Api.Models;
 
+/// <summary>
+/// A squad place: this person, in this team, in this tournament, wearing this number. It stays its
+/// own row even once a person signs in, because organisers add people who don't have the app yet,
+/// the number and position are per tournament, and every goal, ball and card points at it. A place
+/// is linked to the person's account by email or by the team's join code (phase 4).
+/// </summary>
 public class Player
 {
     public int Id { get; set; }
+
+    /// <summary>The name the organiser typed; once linked, kept equal to the account's name.</summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>Football only — a free-text position. Cricket uses <see cref="Cricket"/>.</summary>
@@ -17,12 +27,39 @@ public class Player
     public Team? Team { get; set; }
 
     /// <summary>
-    /// The seam for player sign-in, and nothing more today: a player row belongs to one team in
-    /// one tournament, so the same human is a separate row in every tournament they play. When a
-    /// global Person is introduced, those rows point at it through this column instead of being
-    /// reshaped. Deliberately no foreign key — there is nothing to point at yet.
+    /// The team's tournament, copied here (teams never move) so "one place per tournament" can be
+    /// a unique index. No foreign key: Tournament already cascades to Player through Team, and a
+    /// second path is what SQL Server rejects.
     /// </summary>
-    public int? PersonId { get; set; }
+    [JsonIgnore]
+    public int TournamentId { get; set; }
+
+    /// <summary>The account this place belongs to, once linked. At most one place per account per tournament.</summary>
+    [JsonIgnore]
+    public int? UserId { get; set; }
+
+    [JsonIgnore]
+    public User? User { get; set; }
+
+    /// <summary>
+    /// The sign-in email the organiser entered, or the linked account's. A place whose email has
+    /// no account yet links when that person signs up. Never serialised: owners see it as
+    /// <see cref="Email"/>.
+    /// </summary>
+    [JsonIgnore]
+    public string? EmailId { get; set; }
+
+    /// <summary>Signed in and linked: shown by the account name, with the person's own cricket profile.</summary>
+    [NotMapped]
+    public bool IsLinked => UserId != null;
+
+    /// <summary>The signed-in person's own place — filled per request.</summary>
+    [NotMapped]
+    public bool IsMe { get; set; }
+
+    /// <summary>The email, for the tournament's owners only — filled per request, null for everyone else.</summary>
+    [NotMapped]
+    public string? Email { get; set; }
 
     /// <summary>Null for a football player, and for a cricketer who has not filled it in.</summary>
     public PlayerCricketProfile? Cricket { get; set; }

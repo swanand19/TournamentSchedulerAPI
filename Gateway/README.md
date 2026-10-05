@@ -20,9 +20,9 @@ app                                                API
   byte; request ids are single-use; timestamps must be within 5 minutes; the clear header must match
   the sealed copy.
 - **It does not prove the caller is our app.** The public key ships inside the apps, so anyone can
-  read it and build requests. Proving *who* is calling is sign-in's job (`sessionId` is reserved for
-  it) or app attestation's. It also doesn't replace HTTPS: the phones use plain HTTP on the home
-  Wi-Fi today, which is exactly where this layer matters.
+  read it and build requests. Proving *who* is calling is sign-in's job — the session token sealed
+  in the payload (see `Auth/README.md`) — or app attestation's. It also doesn't replace HTTPS: the
+  phones use plain HTTP on the home Wi-Fi today, which is exactly where this layer matters.
 
 ## Request
 
@@ -35,7 +35,7 @@ app                                                API
     "requestUUID": "3f0e9d8c-7b6a-4f5e-9d3c-2b1a0f9e8d7c",
     "timestamp": "2026-09-29T10:15:30.123Z",
     "journeyId": "b21e…",
-    "sessionId": null,
+    "sessionId": "65ab1f29-…",
     "channel": "MOBILE_ANDROID",
     "appVersion": "1.0.0",
     "deviceId": "random per install",
@@ -52,19 +52,25 @@ app                                                API
 | `requestUUID` | yes | New for every request, retries included. Refused if seen before. Echoed as `X-Request-Id`. |
 | `timestamp` | yes | ISO 8601 UTC. Refused if more than `Gateway:MaxClockSkewSeconds` (300) from the server clock. |
 | `journeyId` | no | Groups one user flow's requests in the logs. Per app launch / page load today. |
-| `sessionId` | no | Reserved for sign-in. `null`. |
+| `sessionId` | no | The signed-in session's id (from sign-in), `null` when signed out. Not secret and not trusted — only groups a device's requests in the logs, which record the session the sealed token really belongs to. |
 | `channel`, `appVersion`, `deviceId` | no | For logs and support. `WEB`, `MOBILE_ANDROID`, `MOBILE_IOS`. |
 | `keyId`, `apiVersion` | no | Informational; the key actually used is the JWE's `kid`. |
 
 `encryptedData` decrypts to the action's input:
 
 ```json
-{ "routeParams": { "matchId": 42 }, "query": { "sport": "Cricket" }, "body": { "runsOffBat": 4 } }
+{ "routeParams": { "matchId": 42 }, "query": { "sport": "Cricket" }, "body": { "runsOffBat": 4 }, "session": "k7Qm…" }
 ```
 
 Route parameters are filled **by name** into the action's route template, so names are part of the
 contract: the tournament is `id`, then `teamId`, `playerId`, `scheduleId`, `matchId`. `body` is
 exactly what the action would receive on its own URL.
+
+`session` is the signed-in app's session token (omitted or `null` when signed out). It is sealed on
+purpose — anyone who copies it is signed in as that user — so it never goes in the clear header, and
+a gateway request never reads an `Authorization` header. Every service except `HEALTH_CHECK`,
+`AUTH_OTP_SEND` and `AUTH_OTP_VERIFY` answers 401 without a valid one. Adding it changed no crypto:
+the shared vectors are untouched.
 
 ## Response
 

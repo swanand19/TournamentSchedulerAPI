@@ -5,7 +5,10 @@ public enum ServiceOutcome
     Ok,
     NotFound,
     Invalid,
-    Conflict
+    Conflict,
+    Forbidden,
+    TooManyRequests,
+    Unavailable
 }
 
 /// <summary>
@@ -49,6 +52,15 @@ public abstract class ServiceBase
     protected static ServiceError BadRequest(string message) => new(ServiceOutcome.Invalid, message);
 
     protected static ServiceError Conflict(string message) => new(ServiceOutcome.Conflict, message);
+
+    /// <summary>403: the caller is known but may not do this.</summary>
+    protected static ServiceError Forbidden(string message) => new(ServiceOutcome.Forbidden, message);
+
+    /// <summary>429: a limit was reached; the message says how long to wait.</summary>
+    protected static ServiceError TooManyRequests(string message) => new(ServiceOutcome.TooManyRequests, message);
+
+    /// <summary>503: something the service depends on (email, say) isn't working right now.</summary>
+    protected static ServiceError Unavailable(string message) => new(ServiceOutcome.Unavailable, message);
 
     /// <summary>For actions answering with an ad-hoc JSON shape (an anonymous object).</summary>
     protected static ServiceResult<object> Ok(object value) => ServiceResult<object>.Ok(value);

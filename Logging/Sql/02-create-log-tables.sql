@@ -1,5 +1,7 @@
-﻿-- Step 2 of 3: the four log tables. Run after 01-create-log-database.sql, as a login that can
--- create tables (your own admin login). Safe to run again: each migration is applied only once.
+-- Step 2 of 3: the four log tables. Run after 01-create-log-database.sql, as a login that can
+-- create tables (your own admin login). Safe to run again: each migration is applied only once —
+-- so on a logs database made from an older copy of this script, it just adds what is new
+-- (UserId columns, 2026-10-01).
 --
 -- Generated from the EF migrations — don't edit by hand. After adding a migration, regenerate with
 --   dotnet ef migrations script --context LogDbContext --idempotent --output Logging/Sql/02-create-log-tables.sql
@@ -195,6 +197,51 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20260930064637_InitialLogs', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260930184406_AddUserIdToLogs'
+)
+BEGIN
+    ALTER TABLE [MBMiddlewareLogs] ADD [UserId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260930184406_AddUserIdToLogs'
+)
+BEGIN
+    ALTER TABLE [MBActivityLogs] ADD [UserId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260930184406_AddUserIdToLogs'
+)
+BEGIN
+    ALTER TABLE [ErrorLogs] ADD [UserId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260930184406_AddUserIdToLogs'
+)
+BEGIN
+    CREATE INDEX [IX_MBActivityLogs_UserId] ON [MBActivityLogs] ([UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260930184406_AddUserIdToLogs'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260930184406_AddUserIdToLogs', N'10.0.9');
 END;
 
 COMMIT;

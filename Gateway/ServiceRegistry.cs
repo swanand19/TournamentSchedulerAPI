@@ -4,16 +4,35 @@ using Microsoft.AspNetCore.Mvc.ActionConstraints;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.Options;
+using TournamentScheduler.Api.Auth;
+using TournamentScheduler.Api.Auth.Permissions;
 
 namespace TournamentScheduler.Api.Gateway;
 
-/// <summary>One callable service: the action a service id names, and how to reach it.</summary>
+/// <summary>
+/// One callable service: the action a service id names, how to reach it, and what the code says
+/// about who may call it (the permission sync copies the latter into the Permissions table).
+/// </summary>
 public sealed record ServiceDescriptor(
     string Id,
     string HttpMethod,
     string RouteTemplate,
     bool SkipsEncryption,
-    string ActionName);
+    string ActionName)
+{
+    /// <summary>"Teams" for TeamsController — as the activity log names it.</summary>
+    public string ControllerName { get; init; } = "";
+
+    /// <summary>The method's own name, e.g. CreateTeam.</summary>
+    public string MethodName { get; init; } = "";
+
+    public bool IsAnonymous { get; init; }
+    public bool IsAdminOnly { get; init; }
+    public bool IsProtected { get; init; }
+
+    /// <summary>Roles ticked when the service first appears. Empty when the code declares none.</summary>
+    public IReadOnlyList<int> DefaultRoleIds { get; init; } = [];
+}
 
 /// <summary>
 /// Every <see cref="ServiceRequestIdAttribute"/> in the API, read once from MVC's own action list,
@@ -51,15 +70,27 @@ public sealed partial class ServiceRegistry
             if (services.TryGetValue(id, out var existing))
                 throw new InvalidOperationException($"Service id {id} is on both {existing.ActionName} and {Describe(action)}.");
 
-            var skips = action.MethodInfo.IsDefined(typeof(SkipEncryptionAttribute), inherit: true)
-                        || action.ControllerTypeInfo.IsDefined(typeof(SkipEncryptionAttribute), inherit: true)
-                        || plain.Contains(id);
+            var skips = Has<SkipEncryptionAttribute>(action) || plain.Contains(id);
 
-            services[id] = new ServiceDescriptor(id, method, template, skips, Describe(action));
+            services[id] = new ServiceDescriptor(id, method, template, skips, Describe(action))
+            {
+                ControllerName = action.ControllerName,
+                MethodName = action.MethodInfo.Name,
+                IsAnonymous = Has<AllowAnonymousServiceAttribute>(action),
+                IsAdminOnly = Has<AdminOnlyAttribute>(action),
+                IsProtected = Has<ProtectedServiceAttribute>(action),
+                DefaultRoleIds = Find<DefaultRolesAttribute>(action)?.RoleIds ?? []
+            };
         }
 
         return services;
     }
+
+    /// <summary>On the action, or else on its controller — the action's own wins.</summary>
+    private static T? Find<T>(ControllerActionDescriptor action) where T : Attribute =>
+        action.MethodInfo.GetCustomAttribute<T>(inherit: true) ?? action.ControllerTypeInfo.GetCustomAttribute<T>(inherit: true);
+
+    private static bool Has<T>(ControllerActionDescriptor action) where T : Attribute => Find<T>(action) != null;
 
     private static string Describe(ControllerActionDescriptor action) => $"{action.ControllerName}Controller.{action.ActionName}";
 

@@ -822,8 +822,14 @@ public class CricketStatsService : ICricketStatsService
                 ["Received"] = f.RunOutsReceived.ToString()
             };
 
+            // The headline board first: every way a fielder takes part in a wicket, then each way on its own.
             return new List<CricketBoard>
             {
+                Board("mostDismissals", "Most fielding dismissals", "Dis",
+                    all.Where(p => p.Value.Dismissals > 0)
+                        .Select(p => new Entry(p.Key, p.Value.Dismissals, 0, p.Value.Dismissals.ToString(), Standard(p.Key, p.Value))),
+                    true, new() { "Ct", "St", "RO" }),
+
                 Board("mostCatches", "Most catches", "Ct",
                     all.Where(p => p.Value.Catches > 0)
                         .Select(p => new Entry(p.Key, p.Value.Catches, 0, p.Value.Catches.ToString(), Standard(p.Key, p.Value))),
@@ -838,11 +844,6 @@ public class CricketStatsService : ICricketStatsService
                     all.Where(p => p.Value.Stumpings > 0)
                         .Select(p => new Entry(p.Key, p.Value.Stumpings, 0, p.Value.Stumpings.ToString(), Standard(p.Key, p.Value))),
                     true, new() { "Mat", "Ct" }),
-
-                Board("mostDismissals", "Most fielding dismissals", "Dis",
-                    all.Where(p => p.Value.Dismissals > 0)
-                        .Select(p => new Entry(p.Key, p.Value.Dismissals, 0, p.Value.Dismissals.ToString(), Standard(p.Key, p.Value))),
-                    true, new() { "Ct", "St", "RO" }),
             };
         }
 

@@ -1,3 +1,4 @@
+using TournamentScheduler.Api.Auth;
 using TournamentScheduler.Api.Data;
 using TournamentScheduler.Api.Gateway;
 using TournamentScheduler.Api.Http;
@@ -11,10 +12,19 @@ using System.Text.Json.Serialization;
 if (GatewayKeyTool.TryRun(args, out var keyToolExitCode))
     return keyToolExitCode;
 
+// `dotnet run -- users create-admin <email> [name]` makes an admin and exits.
+if (UserAdminTool.TryRun(args, out var userToolExitCode))
+    return userToolExitCode;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Every response goes out as { status, data } — see Http/ApiResponse.cs.
-builder.Services.AddControllers(options => options.Filters.Add<ApiResponseFilter>())
+// Every response goes out as { status, data } — see Http/ApiResponse.cs. Every action that touches a
+// tournament is checked against the caller's role in it first — see Auth/TournamentAccess.
+builder.Services.AddControllers(options =>
+    {
+        options.Filters.Add<ApiResponseFilter>();
+        options.Filters.Add<TournamentScheduler.Api.Auth.TournamentAccess.TournamentAccessFilter>();
+    })
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
@@ -32,6 +42,9 @@ builder.Services.AddGateway(builder.Configuration);
 // MBMiddlewareLogs, MBActivityLogs and ErrorLogs, written in the background to the logs database —
 // see Logging/README.md.
 builder.Services.AddLogStore(builder.Configuration);
+
+// Accounts: email one-time codes, sessions, the signed-in user — see Auth/README.md.
+builder.Services.AddAccounts(builder.Configuration);
 
 builder.Services.AddScoped<IHealthService, HealthService>();
 builder.Services.AddScoped<ITournamentService, TournamentService>();
@@ -77,12 +90,15 @@ if (app.Configuration.GetValue("Hosting:RedirectToHttps", true))
 }
 
 // The gateway decrypts and rewrites the request to the action's own URL, so it runs before the
-// router; the activity log and enforcement run after it, once the action is known. The activity log
-// goes first so a refused direct call is recorded too.
+// router; the rest run after it, once the action is known. The activity log goes first so refused
+// calls are recorded too; enforcement before the session check, so a direct call that isn't allowed
+// hears that rather than "sign in"; then who is calling, then whether their role may call this at all.
 app.UseGateway();
 app.UseRouting();
 app.UseActivityLogging();
 app.UseGatewayEnforcement();
+app.UseSessionAuthentication();
+app.UsePermissionAuthorization();
 app.UseAuthorization();
 app.MapControllers();
 

@@ -1,4 +1,8 @@
-﻿namespace TournamentScheduler.Api.Models;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
+using TournamentScheduler.Api.Models.Accounts;
+
+namespace TournamentScheduler.Api.Models;
 
 public class Tournament
 {
@@ -14,6 +18,33 @@ public class Tournament
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public bool IsStarted { get; set; }
     public DateTime? StartedAt { get; set; }
+
+    /// <summary>Who created it — the only one who may delete it, and never removable. System (1) for tournaments from before accounts.</summary>
+    public int CreatedByUserId { get; set; } = SystemUser.Id;
+
+    /// <summary>
+    /// The days it runs, in its own time zone. Required for new tournaments; null on ones from
+    /// before dates existed, which is what exempts those from completing by themselves.
+    /// </summary>
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
+
+    /// <summary>IANA id. Every tournament is in India for now; the column is here so others can follow.</summary>
+    public string TimeZoneId { get; set; } = DefaultTimeZoneId;
+
+    public const string DefaultTimeZoneId = "Asia/Kolkata";
+
+    public TournamentStatus Status { get; set; } = TournamentStatus.Upcoming;
+    public DateTime? CompletedAt { get; set; }
+    public int? CompletedByUserId { get; set; }
+
+    /// <summary>What the signed-in person may do here — filled in per request, never stored.</summary>
+    [NotMapped]
+    public TournamentAccessDto? Access { get; set; }
+
+    [JsonIgnore]
+    public bool IsClosed => Status is TournamentStatus.Completed or TournamentStatus.Cancelled;
+
     public List<SavedSchedule> Schedules { get; set; } = new();
     public List<Team> Teams { get; set; } = new();
 

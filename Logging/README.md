@@ -9,7 +9,11 @@ it is the app's own `requestUUID`, and every response carries it back as `X-Requ
 | `MBMiddlewareLogs` | `GatewayMiddleware` | Every `POST /api/gateway`: the envelope as it arrived (encrypted), as it left, the clear header fields, and `RejectedReason` when the gateway refused it itself (bad envelope, tampered, wrong key, replay, clock, unknown service). |
 | `MBActivityLogs` | `ActivityLogMiddleware` (after routing) | Every call that reached an action, through the gateway or direct: controller, action, the action's own URL (route values and query), the plain request body, the `{ status, data }` answer, status, success, message, timing. |
 | `ErrorLogs` | `ErrorLogProvider` (an `ILoggerProvider`) | Everything logged at Error or Critical anywhere — our code, ASP.NET's exception handler, EF when SQL Server doesn't answer — with the request's id, URL and plain body. |
-| `RemoteLogs` | nothing yet | Reserved for calls to third-party APIs (see *Future: RemoteLogs*). |
+| `RemoteLogs` | `RemoteCallRecorder` | Calls to third parties — today the email server sending sign-in codes: address and subject (never the code), outcome, timing. |
+
+Every row of the first three carries **`UserId`** once someone is signed in (null for sign-in
+itself and anonymous calls), and `SessionId` is the session the sealed token really belongs to —
+not whatever the clear header claimed.
 
 ## How it works
 
@@ -39,8 +43,9 @@ request ─► RequestCorrelation (id) ─► ... ─► Gateway ─► Routing 
 - **Reads (GET) keep no response body** — the live screens poll every few seconds, and every copy of
   the same match state would be stored. Their status, message, size and timing are still recorded.
   Switch `LogStore:LogReadResponseBodies` on while chasing what a screen was sent.
-- **Credentials are masked**: JSON fields named `password`, `pin`, `otp`, `token`, `secret`,
-  `apiKey`, `authorization`, … (any depth, any case) become `"***"`. Everything else is plain on
+- **Credentials are masked**: JSON fields named `password`, `pin`, `otp`, `token`, `sessionToken`,
+  `session`, `secret`, `apiKey`, `authorization`, … (any depth, any case) become `"***"` — so a
+  sign-in's code and the session token it returns are never stored. Everything else is plain on
   purpose — that's what makes the logs useful. The list is `LogStore:MaskedFields`.
   *Why mask even hashed values:* a hash the app sends to log in works exactly like the password
   itself. Passwords should reach the server as typed (the gateway encrypts them in transit) and be
@@ -83,7 +88,9 @@ Scripts in `Logging/Sql/`, run in SSMS against `WJLP-3571\SUBSMANAGEMENTDB` as a
 safe to run again. All three were tested on SQL Server LocalDB.
 
 1. **`01-create-log-database.sql`** — creates `TournamentSchedulerLogs`, SIMPLE recovery, 2 GB / 512 MB caps.
-2. **`02-create-log-tables.sql`** — the four tables and their indexes (generated from the EF migration).
+2. **`02-create-log-tables.sql`** — the four tables and their indexes (generated from the EF
+   migrations). On a logs database made from an older copy it only adds what's new (the `UserId`
+   columns, 2026-10-01) — run it again after pulling.
 3. **`03-grant-log-permissions.sql`** — read + write for the API's login. `@Login` defaults to
    `AdminDBA` (the IIS site's login); a sysadmin login needs nothing, and the script says so.
 
@@ -124,9 +131,16 @@ SELECT ServiceRequestId, COUNT(*) AS Calls, AVG(DurationMs) AS AvgMs, MAX(Durati
 FROM MBActivityLogs WHERE StartDate > DATEADD(hour, -1, SYSUTCDATETIME())
 GROUP BY ServiceRequestId ORDER BY AvgMs DESC;
 
--- One phone's session, in order
+-- One app launch, in order
 SELECT StartDate, ServiceRequestId, HttpStatusCode, StatusMessage FROM MBActivityLogs
 WHERE JourneyId = '…' ORDER BY StartDate;
+
+-- Everything one person did today (UserId from the game database's Users table)
+SELECT StartDate, ServiceRequestId, HttpStatusCode, StatusMessage, Channel FROM MBActivityLogs
+WHERE UserId = 42 AND StartDate > CAST(SYSUTCDATETIME() AS date) ORDER BY StartDate;
+
+-- Sign-in emails that failed
+SELECT TOP 50 StartDate, Url, RequestJson, ErrorMessage FROM RemoteLogs WHERE ErrorMessage IS NOT NULL ORDER BY StartDate DESC;
 ```
 
 ## Changing the tables
@@ -141,10 +155,14 @@ dotnet ef migrations script --context LogDbContext --idempotent --output Logging
 then put the header (with `USE [TournamentSchedulerLogs]`) back on top of the regenerated script. The
 game database's migrations now need `--context TournamentDbContext`.
 
-## Future: RemoteLogs
+## RemoteLogs
 
-The table exists; nothing writes to it. When a third-party API is added, the plan is a
-`DelegatingHandler` attached to its `HttpClient` (`AddHttpClient(...).AddHttpMessageHandler<…>()`)
-that records method, URL, masked headers (`Authorization`, API keys), the plain and encrypted
-request and response, status and timing, under the current request's `RequestUUID` — so every
-integration logs the same way without its own code.
+`RemoteCallRecorder.Start(provider, method, url, request)` returns a handle; call `Succeeded(...)` or
+`Failed(exception)` on it and the row is queued with the current request's `RequestUUID`. The email
+sender (`Auth/Otp/OtpSenders.cs`) is the first user; describe calls without secrets (it records the
+address and subject, never the code).
+
+For HTTP integrations later, the plan is a `DelegatingHandler` on their `HttpClient`
+(`AddHttpClient(...).AddHttpMessageHandler<…>()`) built on the same recorder, recording method, URL,
+masked headers (`Authorization`, API keys), bodies, status and timing — so every integration logs the
+same way without its own code.

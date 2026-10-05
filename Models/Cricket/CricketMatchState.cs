@@ -11,6 +11,9 @@ namespace TournamentScheduler.Api.Models.Cricket;
 public class CricketMatchStateDto
 {
     public int Id { get; set; }
+
+    /// <summary>Who is scoring and what the caller may do about it — filled in per request.</summary>
+    public Accounts.ScoringDto? Scoring { get; set; }
     public int TournamentId { get; set; }
     public string GroupName { get; set; } = string.Empty;
     public int MatchNumber { get; set; }

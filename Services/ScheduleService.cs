@@ -11,17 +11,21 @@ public class ScheduleService : ServiceBase, IScheduleService
     private readonly IDataService<SavedSchedule> _schedules;
     private readonly IDataService<Team> _teams;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly TimeProvider _clock;
 
+    /// <param name="clock">The system clock unless a test gives another; approval checks the dates against "today".</param>
     public ScheduleService(
         IDataService<Tournament> tournaments,
         IDataService<SavedSchedule> schedules,
         IDataService<Team> teams,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        TimeProvider? clock = null)
     {
         _tournaments = tournaments;
         _schedules = schedules;
         _teams = teams;
         _unitOfWork = unitOfWork;
+        _clock = clock ?? TimeProvider.System;
     }
 
     // -----------------------------------------------------------------
@@ -89,6 +93,17 @@ public class ScheduleService : ServiceBase, IScheduleService
         if (tournament == null) return NotFound("Tournament not found.");
         if (tournament.IsStarted)
             return BadRequest("This tournament has already started — its schedule is locked and can no longer be changed.");
+
+        // The dates are settled with the fixtures: sent here, or already set on the tournament.
+        if (request.StartDate != null || request.EndDate != null || tournament.StartDate == null || tournament.EndDate == null)
+        {
+            var start = request.StartDate ?? tournament.StartDate;
+            var end = request.EndDate ?? tournament.EndDate;
+            if (TournamentDates.Problem(start, end, tournament.TimeZoneId, _clock.GetUtcNow().UtcDateTime) is { } problem)
+                return BadRequest(problem);
+            tournament.StartDate = start;
+            tournament.EndDate = end;
+        }
 
         var saved = await ApproveScheduleAsync(request.TournamentId, request.Schedule);
         return Ok(new { savedScheduleId = saved.Id, savedAt = saved.CreatedAt });

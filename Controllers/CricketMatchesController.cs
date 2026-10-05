@@ -1,4 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using TournamentScheduler.Api.Auth.TournamentAccess;
+using TournamentScheduler.Api.Services.Access;
+using TournamentScheduler.Api.Auth.Permissions;
+using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Gateway;
 using TournamentScheduler.Api.Http;
 using TournamentScheduler.Api.Models.Cricket;
@@ -13,6 +17,7 @@ namespace TournamentScheduler.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/cricket-matches")]
+[DefaultRoles(RoleIds.EndUser)] // every signed-up user; Admin is ticked too
 public class CricketMatchesController : ApiController
 {
     private readonly ICricketScoringService _cricket;
@@ -35,6 +40,7 @@ public class CricketMatchesController : ApiController
     // GET api/cricket-matches/5
     [HttpGet("{matchId}")]
     [ServiceRequestId("CRICKET_MATCH_GET")]
+    [TournamentAccess(TournamentPermission.View, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> Get(int matchId)
     {
         var match = await _cricket.GetAsync(matchId);
@@ -45,72 +51,84 @@ public class CricketMatchesController : ApiController
     // GET api/cricket-matches/5/setup-options — presets and both squads, for the setup screen
     [HttpGet("{matchId}/setup-options")]
     [ServiceRequestId("CRICKET_SETUP_OPTIONS")]
+    [TournamentAccess(TournamentPermission.View, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<object>>> GetSetupOptions(int matchId) =>
         Respond(await _queries.GetSetupOptionsAsync(matchId));
 
     // POST api/cricket-matches/5/setup — rules, toss and both XIs
     [HttpPost("{matchId}/setup")]
     [ServiceRequestId("CRICKET_SETUP")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> Setup(int matchId, [FromBody] CricketSetupRequest request) =>
         Respond(await _cricket.SetupAsync(matchId, request));
 
     // POST api/cricket-matches/5/innings/start
     [HttpPost("{matchId}/innings/start")]
     [ServiceRequestId("CRICKET_INNINGS_START")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> StartInnings(int matchId, [FromBody] StartInningsRequest request) =>
         Respond(await _cricket.StartInningsAsync(matchId, request));
 
     // POST api/cricket-matches/5/balls — one delivery
     [HttpPost("{matchId}/balls")]
     [ServiceRequestId("CRICKET_BALL_RECORD")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> RecordBall(int matchId, [FromBody] RecordBallRequest request) =>
         Respond(await _cricket.RecordBallAsync(matchId, request));
 
     // POST api/cricket-matches/5/balls/undo
     [HttpPost("{matchId}/balls/undo")]
     [ServiceRequestId("CRICKET_BALL_UNDO")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> UndoBall(int matchId) =>
         Respond(await _cricket.UndoLastBallAsync(matchId));
 
     // POST api/cricket-matches/5/batter — the next batter in
     [HttpPost("{matchId}/batter")]
     [ServiceRequestId("CRICKET_BATTER_SET")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> SetBatter(int matchId, [FromBody] NewBatterRequest request) =>
         Respond(await _cricket.SetBatterAsync(matchId, request));
 
     // POST api/cricket-matches/5/bowler — who bowls the next over
     [HttpPost("{matchId}/bowler")]
     [ServiceRequestId("CRICKET_BOWLER_SET")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> SetBowler(int matchId, [FromBody] NewBowlerRequest request) =>
         Respond(await _cricket.SetBowlerAsync(matchId, request));
 
     // POST api/cricket-matches/5/innings/end — a declaration or an abandonment
     [HttpPost("{matchId}/innings/end")]
     [ServiceRequestId("CRICKET_INNINGS_END")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> EndInnings(int matchId, [FromBody] EndInningsRequest request) =>
         Respond(await _cricket.EndInningsAsync(matchId, request));
 
     // POST api/cricket-matches/5/innings/reduce-overs — rain: take overs off the innings in play
     [HttpPost("{matchId}/innings/reduce-overs")]
     [ServiceRequestId("CRICKET_REDUCE_OVERS")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> ReduceOvers(int matchId, [FromBody] ReduceOversRequest request) =>
         Respond(await _cricket.ReduceOversAsync(matchId, request));
 
     // POST api/cricket-matches/5/follow-on
     [HttpPost("{matchId}/follow-on")]
     [ServiceRequestId("CRICKET_FOLLOW_ON")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> EnforceFollowOn(int matchId) =>
         Respond(await _cricket.EnforceFollowOnAsync(matchId));
 
     // POST api/cricket-matches/5/super-over/start
     [HttpPost("{matchId}/super-over/start")]
     [ServiceRequestId("CRICKET_SUPER_OVER_START")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> StartSuperOver(int matchId) =>
         Respond(await _cricket.StartSuperOverAsync(matchId));
 
     // POST api/cricket-matches/5/complete
     [HttpPost("{matchId}/complete")]
     [ServiceRequestId("CRICKET_COMPLETE")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> Complete(
         int matchId, [FromBody] CompleteCricketMatchRequest? request = null) =>
         Respond(await _cricket.CompleteAsync(matchId, request ?? new CompleteCricketMatchRequest()));
@@ -118,6 +136,7 @@ public class CricketMatchesController : ApiController
     // GET api/cricket-matches/5/scorecard
     [HttpGet("{matchId}/scorecard")]
     [ServiceRequestId("CRICKET_SCORECARD")]
+    [TournamentAccess(TournamentPermission.View, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketScorecardDto>>> Scorecard(int matchId)
     {
         var card = await _cricket.BuildScorecardAsync(matchId);
@@ -128,18 +147,21 @@ public class CricketMatchesController : ApiController
     // GET api/cricket-matches/5/awards — player of the match and the best of each discipline
     [HttpGet("{matchId}/awards")]
     [ServiceRequestId("CRICKET_AWARDS")]
+    [TournamentAccess(TournamentPermission.View, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<CricketMatchAwardsDto>>> Awards(int matchId) =>
         Respond(await _queries.GetAwardsAsync(matchId));
 
     // GET api/cricket-matches/5/balls — the whole ball-by-ball, oldest first
     [HttpGet("{matchId}/balls")]
     [ServiceRequestId("CRICKET_BALLS")]
+    [TournamentAccess(TournamentPermission.View, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<object>>> GetBalls(int matchId) =>
         Respond(await _queries.GetBallsAsync(matchId));
 
     // GET api/cricket-matches/5/events — the non-ball timeline
     [HttpGet("{matchId}/events")]
     [ServiceRequestId("CRICKET_EVENTS")]
+    [TournamentAccess(TournamentPermission.View, From = TournamentScope.CricketMatch)]
     public async Task<ActionResult<ApiResponse<object>>> GetEvents(int matchId) =>
         Respond(await _queries.GetEventsAsync(matchId));
 }
