@@ -22,7 +22,7 @@ public enum SessionCheckOutcome
     Blocked
 }
 
-public sealed record SessionCheck(SessionCheckOutcome Outcome, int UserId = 0, int RoleId = 0, string Name = "", Guid SessionId = default)
+public sealed record SessionCheck(SessionCheckOutcome Outcome, int UserId = 0, int RoleId = 0, string Name = "", Guid SessionId = default, bool IsPortal = false)
 {
     public bool IsSignedIn => Outcome == SessionCheckOutcome.SignedIn;
 }
@@ -32,8 +32,11 @@ public interface ISessionService
     /// <summary>Who a token belongs to, checked on every request. Moves the session's expiry forward now and then.</summary>
     Task<SessionCheck> CheckAsync(string token);
 
-    /// <summary>A new session for <paramref name="userId"/>: the token (given to the app once) and the stored row.</summary>
-    (string Token, UserSession Session) Start(int userId, ClientInfo client);
+    /// <summary>
+    /// A new session for <paramref name="userId"/>: the token (given to the app once) and the stored row.
+    /// <paramref name="portal"/> only from the admin portal's own sign-in (code and password).
+    /// </summary>
+    (string Token, UserSession Session) Start(int userId, ClientInfo client, bool portal = false);
 }
 
 /// <summary>
@@ -57,10 +60,11 @@ public class SessionService : ServiceBase, ISessionService
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
-    private TimeSpan Lifetime(string? channel) =>
-        TimeSpan.FromDays(string.Equals(channel, "WEB", StringComparison.OrdinalIgnoreCase) ? _options.WebSessionDays : _options.SessionDays);
+    private TimeSpan Lifetime(string? channel, bool portal) =>
+        portal ? TimeSpan.FromHours(_options.PortalSessionHours)
+        : TimeSpan.FromDays(string.Equals(channel, "WEB", StringComparison.OrdinalIgnoreCase) ? _options.WebSessionDays : _options.SessionDays);
 
-    public (string Token, UserSession Session) Start(int userId, ClientInfo client)
+    public (string Token, UserSession Session) Start(int userId, ClientInfo client, bool portal = false)
     {
         var (token, hash) = SessionTokens.NewToken();
         var now = Now;
@@ -73,7 +77,8 @@ public class SessionService : ServiceBase, ISessionService
             DeviceId = Trim(client.DeviceId, 100),
             Crd = now,
             LastSeenAt = now,
-            ExpiresAt = now + Lifetime(client.Channel)
+            IsPortal = portal,
+            ExpiresAt = now + Lifetime(client.Channel, portal)
         };
         _sessions.Add(session);
         return (token, session);
@@ -91,6 +96,7 @@ public class SessionService : ServiceBase, ISessionService
                 s.SessionId,
                 s.UserId,
                 s.Channel,
+                s.IsPortal,
                 s.LastSeenAt,
                 s.ExpiresAt,
                 s.RevokedAt,
@@ -112,12 +118,12 @@ public class SessionService : ServiceBase, ISessionService
             if (session != null)
             {
                 session.LastSeenAt = now;
-                session.ExpiresAt = now + Lifetime(session.Channel);
+                session.ExpiresAt = now + Lifetime(session.Channel, session.IsPortal);
                 await _unitOfWork.SaveChangesAsync();
             }
         }
 
-        return new SessionCheck(SessionCheckOutcome.SignedIn, found.UserId, found.RoleId, found.Name, found.SessionId);
+        return new SessionCheck(SessionCheckOutcome.SignedIn, found.UserId, found.RoleId, found.Name, found.SessionId, found.IsPortal);
     }
 
     private static string? Trim(string? value, int max) => value is { Length: > 0 } ? value.Length > max ? value[..max] : value : null;

@@ -8,11 +8,15 @@ public interface IUserAdminService
 {
     /// <summary>Makes the account with this email an Admin, creating it first if there isn't one.</summary>
     Task<ServiceResult<string>> MakeAdminAsync(string email, string? name);
+
+    /// <summary>Clears a forgotten admin-portal password; the next portal sign-in asks for a new one.</summary>
+    Task<ServiceResult<string>> ResetPasswordAsync(string email);
 }
 
 /// <summary>
-/// What the admin portal will do for users, available before it exists. Today only the first admin,
-/// from the command line (<c>dotnet run -- users create-admin</c>): nobody can sign up as one.
+/// What can't wait for the admin portal, from the command line: the first admin (nobody can sign up
+/// as one — <c>users create-admin</c>), and clearing the portal password of an admin locked out with
+/// no other admin to reset it (<c>users reset-password</c>).
 /// </summary>
 public class UserAdminService : ServiceBase, IUserAdminService
 {
@@ -54,5 +58,22 @@ public class UserAdminService : ServiceBase, IUserAdminService
         user.Modified(now, SystemUser.Id);
         await _unitOfWork.SaveChangesAsync();
         return Success($"{normalised} (account {user.UserId}) is now an admin.");
+    }
+
+    public async Task<ServiceResult<string>> ResetPasswordAsync(string email)
+    {
+        var normalised = AccountService.NormaliseEmail(email);
+        if (normalised == null) return BadRequest($"'{email}' isn't a valid email address.");
+
+        var user = await _users.FirstOrDefaultAsync(u => u.EmailId == normalised);
+        if (user == null) return NotFound($"There is no account for {normalised}.");
+
+        user.PasswordHash = null;
+        user.PasswordSetAt = null;
+        user.FailedPasswordCount = 0;
+        user.PasswordLockedUntil = null;
+        user.Modified(_clock.GetUtcNow().UtcDateTime, SystemUser.Id);
+        await _unitOfWork.SaveChangesAsync();
+        return Success($"Cleared the portal password of {normalised}. Their next portal sign-in asks them to choose a new one.");
     }
 }

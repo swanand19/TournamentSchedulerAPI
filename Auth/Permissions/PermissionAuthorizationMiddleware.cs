@@ -13,6 +13,7 @@ namespace TournamentScheduler.Api.Auth.Permissions;
 /// action. In order:
 /// <list type="number">
 /// <item>Anonymous services (sign-in, health) — yes; the session check already let them through.</item>
+/// <item>Admin-only (portal) services — no, unless the session is a portal one (code and password).</item>
 /// <item>Protected services — yes for every signed-in user (Admin only, for an admin-only one),
 /// whatever the table says: nobody can lock people out of signing out.</item>
 /// <item>Switched off by an admin, or gone from the code — no, for everyone: 403 "currently unavailable".</item>
@@ -32,6 +33,14 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next, Serv
         if (service == null || service.IsAnonymous || !currentUser.IsSignedIn)
         {
             await next(context);
+            return;
+        }
+
+        // The portal's services need the portal's sign-in (code and password), not just a code:
+        // an admin signed in to the phone app can't use them from there.
+        if (service.IsAdminOnly && !currentUser.IsPortal)
+        {
+            await Refuse(context, StatusCodes.Status403Forbidden, "Sign in to the admin portal to do this.");
             return;
         }
 

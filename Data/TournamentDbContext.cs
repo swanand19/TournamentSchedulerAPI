@@ -261,6 +261,7 @@ public class TournamentDbContext : DbContext
             e.HasKey(u => u.UserId);
             e.Property(u => u.Name).HasMaxLength(100).IsRequired();
             e.Property(u => u.EmailId).HasMaxLength(256);
+            e.Property(u => u.PasswordHash).HasMaxLength(200).IsUnicode(false);
             e.Property(u => u.PhoneNumber).HasMaxLength(20);
 
             // Unique only among accounts that have one: deleted accounts all have none.

@@ -18,6 +18,9 @@ public interface ICurrentUser
 
     /// <summary>The device's session, e.g. to sign just this device out.</summary>
     Guid SessionId { get; }
+
+    /// <summary>Signed in to the admin portal (code and password) — needed for every admin-only service.</summary>
+    bool IsPortal { get; }
 }
 
 /// <summary>Filled in by <see cref="SessionAuthenticationMiddleware"/> once per request.</summary>
@@ -32,13 +35,15 @@ public sealed class CurrentUser : ICurrentUser
     public int RoleId { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public Guid SessionId { get; private set; }
+    public bool IsPortal { get; private set; }
 
-    public void SignIn(int userId, int roleId, string name, Guid sessionId)
+    public void SignIn(int userId, int roleId, string name, Guid sessionId, bool isPortal = false)
     {
         _userId = userId;
         RoleId = roleId;
         Name = name;
         SessionId = sessionId;
+        IsPortal = isPortal;
     }
 }
 

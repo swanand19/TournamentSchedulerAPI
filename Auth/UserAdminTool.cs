@@ -9,7 +9,11 @@ namespace TournamentScheduler.Api.Auth;
 /// from the site folder, so it uses that folder's connection string).
 ///
 /// Promotes the account if the email already has one; otherwise creates it (then the name is
-/// needed). The admin signs in like anyone else, with a code sent to that email.
+/// needed). The admin signs in like anyone else, with a code sent to that email; in the admin
+/// portal they also choose a password at their first sign-in.
+///
+/// <c>users reset-password &lt;email&gt;</c> clears a forgotten portal password, for when there is no
+/// other admin to do it from the portal.
 /// </summary>
 public static class UserAdminTool
 {
@@ -20,9 +24,10 @@ public static class UserAdminTool
         exitCode = 0;
         if (args.Length == 0 || args[0] != Command) return false;
 
-        if (args.Length < 3 || args[1] != "create-admin")
+        if (args.Length < 3 || args[1] is not ("create-admin" or "reset-password"))
         {
             Console.Error.WriteLine($"Usage: dotnet run -- {Command} create-admin <email> [name]");
+            Console.Error.WriteLine($"       dotnet run -- {Command} reset-password <email>   (clears a forgotten admin-portal password)");
             exitCode = 2;
             return true;
         }
@@ -49,7 +54,8 @@ public static class UserAdminTool
 
         try
         {
-            var result = scope.ServiceProvider.GetRequiredService<IUserAdminService>().MakeAdminAsync(args[2], name).GetAwaiter().GetResult();
+            var admin = scope.ServiceProvider.GetRequiredService<IUserAdminService>();
+            var result = (args[1] == "reset-password" ? admin.ResetPasswordAsync(args[2]) : admin.MakeAdminAsync(args[2], name)).GetAwaiter().GetResult();
             if (result.IsOk)
             {
                 Console.WriteLine(result.Value);

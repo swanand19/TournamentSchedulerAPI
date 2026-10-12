@@ -321,6 +321,9 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<DateTime?>("EmailVerifiedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("FailedPasswordCount")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsDisabled")
                         .HasColumnType("bit");
 
@@ -337,6 +340,17 @@ namespace TournamentScheduler.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PasswordHash")
+                        .HasMaxLength(200)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime?>("PasswordLockedUntil")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PasswordSetAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("PhoneNumber")
                         .HasMaxLength(20)
@@ -365,6 +379,7 @@ namespace TournamentScheduler.Api.Migrations
                             UserId = 1,
                             Crd = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             CrdBy = 1,
+                            FailedPasswordCount = 0,
                             IsDisabled = false,
                             Lmd = new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             LmdBy = 1,
@@ -417,6 +432,9 @@ namespace TournamentScheduler.Api.Migrations
 
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsPortal")
+                        .HasColumnType("bit");
 
                     b.Property<DateTime>("LastSeenAt")
                         .HasColumnType("datetime2");

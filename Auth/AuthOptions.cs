@@ -20,6 +20,16 @@ public sealed class AuthOptions
     /// </summary>
     public int SessionTouchMinutes { get; set; } = 5;
 
+    /// <summary>
+    /// The admin portal stays signed in this long after its last use — a working day, not weeks:
+    /// it can block people and change what everyone may do.
+    /// </summary>
+    public int PortalSessionHours { get; set; } = 12;
+
+    /// <summary>Wrong portal passwords in a row before the portal sign-in locks, and for how long.</summary>
+    public int PasswordMaxAttempts { get; set; } = 5;
+    public int PasswordLockMinutes { get; set; } = 15;
+
     /// <summary>How often the in-memory permissions are reloaded, so a change made in SQL applies within this long.</summary>
     public int PermissionRefreshSeconds { get; set; } = 60;
 

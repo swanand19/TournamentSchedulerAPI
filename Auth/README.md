@@ -1,9 +1,10 @@
 # Accounts, sign-in, role permissions and tournament access
 
-Phases 1–4 of `docs/accounts-and-access-plan.md`: people sign in with a code emailed to them (no
-passwords), every request says who they are, each kind of account (role) may call only the
+Phases 1–5 of `docs/accounts-and-access-plan.md`: people sign in with a code emailed to them (no
+passwords in the apps), every request says who they are, each kind of account (role) may call only the
 services ticked for it, inside a tournament only its owners and scorers may change it (its players
-may look), squad places link to people's accounts, and people can delete their account.
+may look), squad places link to people's accounts, people can delete their account, and admins run
+all of it from the admin portal (code + password).
 
 ## The flow
 
@@ -207,13 +208,56 @@ wording, same limits as sign-in codes); `ACCOUNT_DELETE { otp }` does it:
 Signing up again with the same email makes a new, empty account. Admin accounts can't be deleted
 from the app (`canDelete` false on `ACCOUNT_GET`).
 
+## The admin portal (phase 5)
+
+A separate React app, `tournament-scheduler-admin/` (port 5174), on the same encrypted gateway
+(channel `PORTAL`). Pages: Tournaments (Live / Upcoming / Past, paged, search, reopen), People
+(search, block, change role, sign out everywhere, reset portal password), Roles (create, rename,
+delete, the role editor) and Permissions (switch services off, "Update permissions" = the sync).
+Each page shows only if the signed-in role may use its list service (`ADMIN_ME.services`).
+
+**Signing in: two factors.** The emailed code (`AUTH_OTP_SEND`, as in the apps), then
+`ADMIN_AUTH_SIGN_IN { email, otp, password?, newPassword? }`:
+
+| Answer | Means |
+|---|---|
+| `NeedsNewPassword` | First portal sign-in: choose a password (10–128 characters) and send it with the same code. |
+| `NeedsPassword` | Send the password with the same code (a typo doesn't cost a new email). |
+| `SignedIn` | A **portal session** (`UserSessions.IsPortal`, 12 hours sliding, `Auth:PortalSessionHours`). |
+| 403 "You don't have access to the admin portal." | The role has no portal service ticked (EndUser never does). |
+| 429 "Too many wrong passwords…" | 5 wrong in a row lock it for 15 minutes (`Auth:PasswordMaxAttempts` / `PasswordLockMinutes`). |
+
+Passwords are hashed with ASP.NET's `PasswordHasher` (salted PBKDF2), `Users.PasswordHash`.
+**Admin-only services refuse any session that isn't a portal session** — 403 "Sign in to the admin
+portal to do this." — so an admin signed in to the phone app with just a code can't use them; the
+portal flag is set only by `ADMIN_AUTH_SIGN_IN`, never from the request's channel.
+
+Forgot the password: another admin clears it (People → Reset password), or on the server
+`dotnet run -- users reset-password <email>` (IIS: `dotnet TournamentScheduler.Api.dll users reset-password <email>`).
+The next portal sign-in asks for a new one.
+
+**Guards** (also enforced on the server, the portal just shows them):
+- Anonymous and protected services can't be switched off. The permission and role screens are
+  `[ProtectedService]` + `[AdminOnly]`: Admin can never lose them.
+- The role editor saves the whole set. Boxes are locked when ticks mean nothing (anonymous,
+  protected app services), Admin must keep its protected ones, and portal services can never be
+  ticked for EndUser (400 if tried).
+- Admin and EndUser can't be renamed or deleted; a role people still have can't be deleted.
+- Nobody can block themselves or change their own role; System and deleted accounts can't be
+  changed. Blocking signs the person out at once; resetting a password ends their portal sessions.
+- Reopening: completed → Live, cancelled → Upcoming. If the end date has passed it would close again
+  within the hour, so a new end date is required (the one-year limit doesn't apply).
+
+Every change to permissions or ticks reloads the request check at once.
+
 ## Tables (game database)
 
 `Users`, `Roles` (1 Admin, 2 EndUser — fixed ids the code relies on), `UserSessions`,
 `OtpChallenges` (script `deploy/sql/01-accounts.sql`); `Permissions`, `RolePermissions` (script
 `deploy/sql/02-permissions.sql`); `TournamentMembers` plus the new tournament and match columns
 (script `deploy/sql/03-tournament-access.sql`); `UserCricketProfiles`, `Players.UserId/EmailId/TournamentId`,
-`Teams.JoinCode` (script `deploy/sql/05-player-accounts.sql`). UserId 1 is **System**: no email, can't sign in, owns
+`Teams.JoinCode` (script `deploy/sql/05-player-accounts.sql`); the portal password columns on `Users` and
+`UserSessions.IsPortal` (script `deploy/sql/06-admin-portal.sql`). UserId 1 is **System**: no email, can't sign in, owns
 pre-accounts data and is `CrdBy` on seeded and synced rows.
 
 ## Settings
@@ -250,5 +294,5 @@ dotnet TournamentScheduler.Api.dll users create-admin you@example.com "Your Name
 ```
 
 Promotes the account if the email has one, otherwise creates it. The admin then signs in with a
-code like anyone else. Admin is ticked for every service, but there are no admin-only services
-until the portal (phase 5).
+code like anyone else; in the admin portal they also choose a password at their first sign-in
+(see "The admin portal" above).

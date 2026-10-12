@@ -39,7 +39,7 @@ public sealed class SessionAuthenticationMiddleware(RequestDelegate next, IOptio
             check = await sessions.CheckAsync(token);
             if (check.IsSignedIn)
             {
-                currentUser.SignIn(check.UserId, check.RoleId, check.Name, check.SessionId);
+                currentUser.SignIn(check.UserId, check.RoleId, check.Name, check.SessionId, check.IsPortal);
                 if (RequestLogContext.Of(context) is { } log)
                 {
                     log.UserId = check.UserId;

@@ -76,6 +76,21 @@ public class User : AuditedEntity
 
     public DateTime? LastLoginAt { get; set; }
     public DateTime? DeletedOn { get; set; }
+
+    /// <summary>
+    /// The admin portal's second factor (phase 5): ASP.NET's salted PBKDF2 hash, never the
+    /// password. Only accounts whose role has portal permissions ever set one; null until they
+    /// choose it at their first portal sign-in (or after an admin resets it).
+    /// </summary>
+    [JsonIgnore]
+    public string? PasswordHash { get; set; }
+
+    public DateTime? PasswordSetAt { get; set; }
+
+    /// <summary>Wrong portal passwords in a row; five lock the portal sign-in for a while.</summary>
+    public int FailedPasswordCount { get; set; }
+
+    public DateTime? PasswordLockedUntil { get; set; }
 }
 
 /// <summary>
@@ -107,6 +122,14 @@ public class UserSession
 
     public string? Channel { get; set; }
     public string? DeviceId { get; set; }
+
+    /// <summary>
+    /// Signed in to the admin portal with a code and a password. Set only by the portal's own
+    /// sign-in — never from the request's channel, which the caller chooses — and required for
+    /// every admin-only service.
+    /// </summary>
+    public bool IsPortal { get; set; }
+
     public DateTime Crd { get; set; }
     public DateTime LastSeenAt { get; set; }
 

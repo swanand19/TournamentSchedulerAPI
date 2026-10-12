@@ -6,6 +6,7 @@ using TournamentScheduler.Api.Logging;
 using TournamentScheduler.Api.Services;
 using TournamentScheduler.Api.Services.Access;
 using TournamentScheduler.Api.Services.Accounts;
+using TournamentScheduler.Api.Services.Admin;
 
 namespace TournamentScheduler.Api.Auth;
 
@@ -44,6 +45,13 @@ public static class AuthRegistration
         services.AddScoped<IPlayerLinkService, PlayerLinkService>();
         services.AddScoped<ITeamJoinService, TeamJoinService>();
         services.AddSingleton<JoinCodeAttempts>();
+
+        // The admin portal: its sign-in (code + password), permissions and roles, people, every tournament.
+        services.AddScoped<PortalAccess>();
+        services.AddScoped<IAdminSignInService, AdminSignInService>();
+        services.AddScoped<IAdminPermissionService, AdminPermissionService>();
+        services.AddScoped<IAdminUserService, AdminUserService>();
+        services.AddScoped<IAdminTournamentService, AdminTournamentService>();
         services.AddScoped<ITournamentLifecycleService, TournamentLifecycleService>();
         services.AddHostedService<TournamentLifecycleJob>();
 
