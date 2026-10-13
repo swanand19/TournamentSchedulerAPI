@@ -7,8 +7,10 @@ namespace TournamentScheduler.Api.Services.Cricket;
 ///
 /// Modelled on the classic T20 fantasy-cricket table (the Dream11 system most scoring apps borrow):
 /// every contribution earns points, so a 30 off 12 balls, a tight four-over spell and a direct-hit
-/// run-out can all be weighed against each other. The values sit in one place so a league can tune
-/// them without touching the arithmetic.
+/// run-out can all be weighed against each other. There are no points for just being picked: a
+/// player's total is exactly their batting, bowling and fielding, so the three parts the stats page
+/// shows always add up, and the MVP race isn't tilted towards whoever played the most matches.
+/// The values sit in one place so a league can tune them without touching the arithmetic.
 ///
 /// Run-outs follow this league's own rule: a direct hit is worth the full run-out; when two fielders
 /// are involved the thrower takes the credit and the receiver takes none.
@@ -42,8 +44,6 @@ public static class CricketFantasyPoints
     public const int RunOutDirectHit = 12;
     /// <summary>The thrower in a two-fielder run-out. The receiver gets nothing.</summary>
     public const int RunOutThrower = 6;
-
-    public const int PlayingXi = 4;
 
     // --- Rate bonuses, T20 bands ---------------------------------------
     public const int StrikeRateMinimumBalls = 10;
@@ -95,7 +95,6 @@ public static class CricketFantasyPoints
         ("Fielding", "Stumping", Stumping),
         ("Fielding", "Run-out, direct hit", RunOutDirectHit),
         ("Fielding", "Run-out, thrower (receiver gets 0)", RunOutThrower),
-        ("Other", "In the playing XI", PlayingXi),
         ("Strike rate (min 10 balls)", "Above 170", 6),
         ("Strike rate (min 10 balls)", "150.01 – 170", 4),
         ("Strike rate (min 10 balls)", "130 – 150", 2),
@@ -116,8 +115,7 @@ public static class CricketFantasyPoints
         public int Batting { get; set; }
         public int Bowling { get; set; }
         public int Fielding { get; set; }
-        public int Playing { get; set; }
-        public int Total => Batting + Bowling + Fielding + Playing;
+        public int Total => Batting + Bowling + Fielding;
     }
 
     /// <summary>
@@ -135,9 +133,6 @@ public static class CricketFantasyPoints
 
         var innings = match.Innings.Where(i => !i.IsSuperOver).ToList();
         if (innings.All(i => i.Balls.Count == 0)) return points;
-
-        foreach (var member in match.Squad.Where(p => p.SquadStatus == CricketSquadStatus.Playing))
-            For(member.PlayerId).Playing += PlayingXi;
 
         var catches = new Dictionary<int, int>();
 

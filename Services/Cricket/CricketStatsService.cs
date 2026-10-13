@@ -404,7 +404,6 @@ public class CricketStatsService : ICricketStatsService
                     total.Batting += p.Batting;
                     total.Bowling += p.Bowling;
                     total.Fielding += p.Fielding;
-                    total.Playing += p.Playing;
                 }
 
                 if (match.Status == CricketMatchStatus.Completed)
@@ -857,12 +856,10 @@ public class CricketStatsService : ICricketStatsService
                         ["Mat"] = MatchesPlayed(p.Key).ToString(),
                         ["Batting"] = p.Value.Batting.ToString(),
                         ["Bowling"] = p.Value.Bowling.ToString(),
-                        ["Fielding"] = p.Value.Fielding.ToString(),
-                        ["XI"] = p.Value.Playing.ToString(),
-                        ["Per match"] = F1(p.Value.Total / (double)played)
+                        ["Fielding"] = p.Value.Fielding.ToString()
                     });
                 }),
-                true, new() { "Batting", "Bowling", "Fielding", "XI", "Per match", "Mat" },
+                true, new() { "Batting", "Bowling", "Fielding", "Mat" },
                 take: 25);
 
         public List<CricketPlayerOfMatch> PlayersOfMatch() =>
