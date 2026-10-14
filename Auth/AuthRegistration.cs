@@ -17,6 +17,7 @@ public static class AuthRegistration
     {
         services.Configure<AuthOptions>(configuration.GetSection(AuthOptions.Section));
         services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.Section));
+        services.Configure<SmsOptions>(configuration.GetSection(SmsOptions.Section));
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddScoped<CurrentUser>();
@@ -55,13 +56,11 @@ public static class AuthRegistration
         services.AddScoped<ITournamentLifecycleService, TournamentLifecycleService>();
         services.AddHostedService<TournamentLifecycleJob>();
 
+        // Codes go out by email or text message; the dispatcher picks the sender per message.
         services.AddSingleton<RemoteCallRecorder>();
         services.AddSingleton<SmtpOtpSender>();
         services.AddSingleton<LogOtpSender>();
-        services.AddSingleton<IOtpSender>(sp =>
-            sp.GetRequiredService<IOptions<AuthOptions>>().Value.OtpDelivery == OtpDelivery.Log
-                ? sp.GetRequiredService<LogOtpSender>()
-                : sp.GetRequiredService<SmtpOtpSender>());
+        services.AddSingleton<IOtpSender, OtpDispatcher>();
 
         return services;
     }

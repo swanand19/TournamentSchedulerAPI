@@ -49,6 +49,14 @@ public class Player
     [JsonIgnore]
     public string? EmailId { get; set; }
 
+    /// <summary>
+    /// The mobile number (E.164) the organiser entered (phase 6B). Like the email, a place waiting
+    /// on a number links when that person signs in with it. Never copied from the account: a
+    /// player's number is theirs to give. Owners see it as <see cref="Phone"/>.
+    /// </summary>
+    [JsonIgnore]
+    public string? PhoneNumber { get; set; }
+
     /// <summary>Signed in and linked: shown by the account name, with the person's own cricket profile.</summary>
     [NotMapped]
     public bool IsLinked => UserId != null;
@@ -60,6 +68,10 @@ public class Player
     /// <summary>The email, for the tournament's owners only — filled per request, null for everyone else.</summary>
     [NotMapped]
     public string? Email { get; set; }
+
+    /// <summary>The mobile number, for the tournament's owners only — filled per request, null for everyone else.</summary>
+    [NotMapped]
+    public string? Phone { get; set; }
 
     /// <summary>Null for a football player, and for a cricketer who has not filled it in.</summary>
     public PlayerCricketProfile? Cricket { get; set; }

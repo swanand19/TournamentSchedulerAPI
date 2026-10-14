@@ -91,7 +91,7 @@ public class AdminSignInService : ServiceBase, IAdminSignInService
         var email = AccountService.NormaliseEmail(request.Email);
         if (email == null) return BadRequest("Enter a valid email address.");
 
-        var (challenge, wrong) = await _codes.CheckAsync(email, OtpPurpose.SignIn, request.Otp);
+        var (challenge, wrong) = await _codes.CheckAsync(new Contact(ContactKind.Email, email), OtpPurpose.SignIn, request.Otp);
         if (wrong is { } error) return error;
 
         var now = _clock.GetUtcNow().UtcDateTime;

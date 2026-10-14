@@ -368,11 +368,13 @@ public class TournamentDbContext : DbContext
         modelBuilder.Entity<Player>(e =>
         {
             e.Property(p => p.EmailId).HasMaxLength(256);
+            e.Property(p => p.PhoneNumber).HasMaxLength(20);
 
             // One place per person per tournament.
             e.HasIndex(p => new { p.TournamentId, p.UserId }).IsUnique().HasFilter("[UserId] IS NOT NULL");
             e.HasIndex(p => p.UserId);   // "tournaments I play in", renames
             e.HasIndex(p => p.EmailId);  // linking when someone signs up
+            e.HasIndex(p => p.PhoneNumber);
 
             // Accounts are never deleted (they're anonymised), so this never has to cascade.
             e.HasOne(p => p.User).WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Restrict);

@@ -49,11 +49,12 @@ public static class RoleIds
 
 /// <summary>
 /// One person, whatever they do: organise, score or play. Signs in with a one-time code sent to
-/// their email; there is no password.
+/// their email or, by text message, their mobile number; there is no password. An account has at
+/// least one of the two (phase 6B), each proved with a code before it is saved.
 ///
 /// Blocked (<see cref="AuditedEntity.IsDisabled"/>) and deleted (<see cref="DeletedOn"/>) are different on
-/// purpose: a blocked account keeps its email so it can't sign up again; a deleted one is
-/// anonymised and its email freed.
+/// purpose: a blocked account keeps its email and number so it can't sign up again; a deleted one
+/// is anonymised and both are freed.
 /// </summary>
 public class User : AuditedEntity
 {
@@ -63,11 +64,14 @@ public class User : AuditedEntity
     /// <summary>Lower-case. Unique among accounts that have one; null once an account is deleted.</summary>
     public string? EmailId { get; set; }
 
-    /// <summary>For phone sign-in later. Not used yet.</summary>
+    /// <summary>E.164 ("+919876543210"). Unique among accounts that have one; null once an account is deleted.</summary>
     public string? PhoneNumber { get; set; }
 
-    /// <summary>When the email was first proved with a code — the moment the account became usable.</summary>
+    /// <summary>When the email was proved with a code.</summary>
     public DateTime? EmailVerifiedAt { get; set; }
+
+    /// <summary>When the mobile number was proved with a texted code.</summary>
+    public DateTime? PhoneVerifiedAt { get; set; }
 
     public int RoleId { get; set; }
 
@@ -144,13 +148,19 @@ public enum OtpPurpose
 {
     SignIn = 0,
 
-    /// <summary>Confirms "Delete my account": the same email code, kept apart so one can't stand in for the other.</summary>
-    DeleteAccount = 1
+    /// <summary>Confirms "Delete my account": the same kind of code, kept apart so one can't stand in for the other.</summary>
+    DeleteAccount = 1,
+
+    /// <summary>Proves an email or mobile number someone is adding to (or changing on) their account.</summary>
+    AddContact = 2
 }
 
 public enum OtpChannel
 {
-    Email = 0
+    Email = 0,
+
+    /// <summary>A text message to a mobile number.</summary>
+    Sms = 1
 }
 
 /// <summary>
@@ -163,10 +173,10 @@ public class OtpChallenge
     public OtpPurpose Purpose { get; set; }
     public OtpChannel Channel { get; set; }
 
-    /// <summary>Where it was sent: the lower-case email.</summary>
+    /// <summary>Where it was sent: the lower-case email, or the E.164 mobile number.</summary>
     public string Target { get; set; } = string.Empty;
 
-    /// <summary>SHA-256 of the email and code, as hex.</summary>
+    /// <summary>SHA-256 of the target and code, as hex.</summary>
     public string CodeHash { get; set; } = string.Empty;
     public int Attempts { get; set; }
     public DateTime ExpiresAt { get; set; }

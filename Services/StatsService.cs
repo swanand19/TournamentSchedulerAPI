@@ -7,6 +7,31 @@ namespace TournamentScheduler.Api.Services;
 public interface IStatsService
 {
     Task<TournamentStats?> BuildAsync(int tournamentId);
+
+    /// <summary>
+    /// Every player's raw figures from one tournament's completed matches, keyed by player id —
+    /// the same tallies the leaderboards rank, for career pages to add up.
+    /// </summary>
+    Task<Dictionary<int, FootballPlayerFigures>> PlayerFiguresAsync(int tournamentId);
+}
+
+/// <summary>One player's figures from a set of completed matches.</summary>
+public sealed class FootballPlayerFigures
+{
+    public int PlayerId;
+    public int TeamId;
+    public int Goals;
+    public int Assists;
+    public int Appearances;
+    public int Starts;
+    public int MinutesPlayed;
+    public int YellowCards;
+    public int StraightReds;
+    public int SecondYellowReds;
+    public int ShootoutTaken;
+    public int ShootoutScored;
+    public int TotalReds => StraightReds + SecondYellowReds;
+    public int DisciplinePoints => YellowCards + TotalReds * 3;
 }
 
 /// <summary>
@@ -92,37 +117,35 @@ public class StatsService : IStatsService
         return stats;
     }
 
+    public async Task<Dictionary<int, FootballPlayerFigures>> PlayerFiguresAsync(int tournamentId)
+    {
+        var counted = await _matches.ListAsync(m => m.TournamentId == tournamentId && m.Status == MatchStatus.Completed, tracking: false);
+        var countedIds = counted.Select(m => m.Id).ToHashSet();
+        if (countedIds.Count == 0) return new Dictionary<int, FootballPlayerFigures>();
+
+        var squads = await _squads.ListAsync(mp => countedIds.Contains(mp.MatchId), tracking: false);
+        var events = await _events.ListAsync(
+            e => countedIds.Contains(e.MatchId),
+            q => q.OrderBy(e => e.CreatedAt).ThenBy(e => e.Id),
+            tracking: false);
+        var kicks = await _kicks.ListAsync(k => countedIds.Contains(k.MatchId), tracking: false);
+
+        return BuildPlayerTallies(counted, squads, events, kicks);
+    }
+
     // -----------------------------------------------------------------
     // Per-player tallies
     // -----------------------------------------------------------------
 
-    private sealed class Tally
-    {
-        public int PlayerId;
-        public int TeamId;
-        public int Goals;
-        public int Assists;
-        public int Appearances;
-        public int Starts;
-        public int MinutesPlayed;
-        public int YellowCards;
-        public int StraightReds;
-        public int SecondYellowReds;
-        public int ShootoutTaken;
-        public int ShootoutScored;
-        public int TotalReds => StraightReds + SecondYellowReds;
-        public int DisciplinePoints => YellowCards + TotalReds * 3;
-    }
-
-    private static Dictionary<int, Tally> BuildPlayerTallies(
+    private static Dictionary<int, FootballPlayerFigures> BuildPlayerTallies(
         List<Match> matches, List<MatchPlayer> squads, List<MatchEvent> events, List<PenaltyKick> kicks)
     {
-        var tallies = new Dictionary<int, Tally>();
+        var tallies = new Dictionary<int, FootballPlayerFigures>();
 
-        Tally For(int playerId, int teamId)
+        FootballPlayerFigures For(int playerId, int teamId)
         {
             if (!tallies.TryGetValue(playerId, out var t))
-                tallies[playerId] = t = new Tally { PlayerId = playerId, TeamId = teamId };
+                tallies[playerId] = t = new FootballPlayerFigures { PlayerId = playerId, TeamId = teamId };
             return t;
         }
 
@@ -266,17 +289,17 @@ public class StatsService : IStatsService
     // -----------------------------------------------------------------
 
     private static List<StatBoard> BuildBoards(
-        Dictionary<int, Tally> tallies,
+        Dictionary<int, FootballPlayerFigures> tallies,
         Dictionary<int, (Player Player, Team Team)> playerLookup,
         Dictionary<int, string> teamNames)
     {
         var boards = new List<StatBoard>();
 
-        StatBoard Board(string key, string title, string valueLabel, Func<Tally, int> value,
+        StatBoard Board(string key, string title, string valueLabel, Func<FootballPlayerFigures, int> value,
             string? note = null, bool showPerMatch = false,
-            Func<Tally, Dictionary<string, int>>? detail = null,
+            Func<FootballPlayerFigures, Dictionary<string, int>>? detail = null,
             List<string>? detailColumns = null,
-            Func<Tally, bool>? include = null)
+            Func<FootballPlayerFigures, bool>? include = null)
         {
             var rows = tallies.Values
                 .Where(t => value(t) > 0 && (include == null || include(t)))
@@ -473,7 +496,7 @@ public class StatsService : IStatsService
 
     private static TournamentSummary BuildSummary(
         List<Match> allMatches, List<Match> counted, List<MatchEvent> events,
-        List<PenaltyKick> kicks, Dictionary<int, Tally> tallies)
+        List<PenaltyKick> kicks, Dictionary<int, FootballPlayerFigures> tallies)
     {
         var goals = events.Count(e => e.EventType == MatchEventType.Goal);
         var secondYellows = events

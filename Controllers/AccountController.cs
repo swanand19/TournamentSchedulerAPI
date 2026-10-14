@@ -37,6 +37,24 @@ public class AccountController : ApiController
     public async Task<ActionResult<ApiResponse<AccountDto>>> Update([FromBody] UpdateAccountRequest request) =>
         Respond(await _accounts.UpdateAccountAsync(request));
 
+    // POST api/account/contact/send — { contact }: texts or emails a code to an email or number to add
+    [HttpPost("contact/send")]
+    [ServiceRequestId("ACCOUNT_CONTACT_SEND")]
+    public async Task<ActionResult<ApiResponse<SendOtpResponse>>> SendContactCode([FromBody] ContactCodeRequest request) =>
+        Respond(await _accounts.SendContactCodeAsync(request, Client));
+
+    // POST api/account/contact/verify — { contact, otp }: adds it (replacing the one of that kind)
+    [HttpPost("contact/verify")]
+    [ServiceRequestId("ACCOUNT_CONTACT_VERIFY")]
+    public async Task<ActionResult<ApiResponse<AccountDto>>> VerifyContact([FromBody] VerifyContactRequest request) =>
+        Respond(await _accounts.VerifyContactAsync(request));
+
+    // POST api/account/contact/remove — { kind: Email | Phone }; never the last one
+    [HttpPost("contact/remove")]
+    [ServiceRequestId("ACCOUNT_CONTACT_REMOVE")]
+    public async Task<ActionResult<ApiResponse<AccountDto>>> RemoveContact([FromBody] RemoveContactRequest request) =>
+        Respond(await _accounts.RemoveContactAsync(request));
+
     // POST api/account/delete/preview — what deleting would do; emails the code that confirms it
     [HttpPost("delete/preview")]
     [ServiceRequestId("ACCOUNT_DELETE_PREVIEW")]

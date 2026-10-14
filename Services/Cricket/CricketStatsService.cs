@@ -11,6 +11,65 @@ public interface ICricketStatsService
 {
     /// <summary>Null when the tournament does not exist.</summary>
     Task<CricketTournamentStats?> BuildAsync(int tournamentId);
+
+    /// <summary>
+    /// Every player's raw figures from one tournament's completed matches, and each of those
+    /// matches' player of the match — what a career page adds up. Empty when there are none.
+    /// </summary>
+    Task<CricketTournamentFigures> PlayerFiguresAsync(int tournamentId);
+}
+
+/// <summary>A tournament's figures for career pages: per player, plus the match awards.</summary>
+public sealed class CricketTournamentFigures
+{
+    public Dictionary<int, CricketPlayerFigures> Players { get; init; } = new();
+    public List<CricketPlayerOfMatchAward> PlayersOfMatch { get; init; } = new();
+}
+
+public sealed record CricketPlayerOfMatchAward(
+    int PlayerId, int MatchId, int MatchNumber, string Fixture, DateTime? Date, string Summary);
+
+/// <summary>
+/// One player's raw figures, kept as counts (never averages) so several tournaments can be added
+/// together and the rates worked out once from the totals.
+/// </summary>
+public sealed class CricketPlayerFigures
+{
+    public int Matches;
+    public int Innings, NotOuts, Runs, BallsFaced, Fours, Sixes, Fifties, Hundreds, Ducks;
+    /// <summary>-1 until the player has batted.</summary>
+    public int High = -1;
+    public bool HighNotOut;
+    public int BowlingInnings, LegalBalls, RunsConceded, Wickets, Maidens, Hauls3, Hauls5;
+    public double Overs;
+    /// <summary>-1 until the player has bowled.</summary>
+    public int BestWickets = -1, BestRuns;
+    public int Catches, Stumpings, RunOuts;
+    public int MvpPoints;
+
+    public int Dismissals => Innings - NotOuts;
+    public double? Average => Dismissals > 0 ? Runs / (double)Dismissals : null;
+    public double? StrikeRate => BallsFaced > 0 ? Runs * 100.0 / BallsFaced : null;
+    public double? Economy => Overs > 0 ? RunsConceded / Overs : null;
+    public double? BowlingAverage => Wickets > 0 ? RunsConceded / (double)Wickets : null;
+
+    /// <summary>Adds another tournament: counts sum, the best innings and best figures are kept.</summary>
+    public void Add(CricketPlayerFigures o)
+    {
+        Matches += o.Matches;
+        Innings += o.Innings; NotOuts += o.NotOuts; Runs += o.Runs; BallsFaced += o.BallsFaced;
+        Fours += o.Fours; Sixes += o.Sixes; Fifties += o.Fifties; Hundreds += o.Hundreds; Ducks += o.Ducks;
+        if (o.High > High || (o.High == High && o.HighNotOut)) { High = o.High; HighNotOut = o.HighNotOut; }
+        BowlingInnings += o.BowlingInnings; LegalBalls += o.LegalBalls; RunsConceded += o.RunsConceded;
+        Wickets += o.Wickets; Maidens += o.Maidens; Hauls3 += o.Hauls3; Hauls5 += o.Hauls5; Overs += o.Overs;
+        if (o.BestWickets > BestWickets || (o.BestWickets == BestWickets && o.BestRuns < BestRuns))
+        {
+            BestWickets = o.BestWickets;
+            BestRuns = o.BestRuns;
+        }
+        Catches += o.Catches; Stumpings += o.Stumpings; RunOuts += o.RunOuts;
+        MvpPoints += o.MvpPoints;
+    }
 }
 
 /// <summary>
@@ -64,6 +123,27 @@ public class CricketStatsService : ICricketStatsService
             .ToDictionary(p => p.PlayerId, p => p.PrimaryRole);
 
         return Build(tournament.Id, tournament.Name, matches, roles);
+    }
+
+    public async Task<CricketTournamentFigures> PlayerFiguresAsync(int tournamentId)
+    {
+        var matches = await _matches.ListAsync(
+            m => m.TournamentId == tournamentId && m.Status == CricketMatchStatus.Completed, CricketMatchQueries.Full, tracking: false);
+        if (matches.Count == 0) return new CricketTournamentFigures();
+
+        var playerIds = matches.SelectMany(m => m.Squad).Select(p => p.PlayerId).Distinct().ToList();
+        var roles = (await _profiles.ListAsync(p => playerIds.Contains(p.PlayerId), tracking: false))
+            .ToDictionary(p => p.PlayerId, p => p.PrimaryRole);
+
+        var ledger = new Ledger(matches, roles);
+        return new CricketTournamentFigures
+        {
+            Players = ledger.Figures(),
+            PlayersOfMatch = ledger.PlayersOfMatch()
+                .Select(p => new CricketPlayerOfMatchAward(p.PlayerId, p.MatchId, p.MatchNumber, p.Fixture,
+                    matches.First(m => m.Id == p.MatchId).CompletedAt, p.Summary))
+                .ToList()
+        };
     }
 
     /// <summary>Pure: everything below works on already-loaded matches, which is what the tests use.</summary>
@@ -409,7 +489,7 @@ public class CricketStatsService : ICricketStatsService
                 if (match.Status == CricketMatchStatus.Completed)
                 {
                     _decided.Add(match);
-                    if (points.Count > 0) AddPlayerOfMatch(match, points, lines);
+                    if (points.Count > 0) AddPlayerOfMatch(match, points, lines, roles);
                 }
             }
         }
@@ -558,10 +638,16 @@ public class CricketStatsService : ICricketStatsService
             Close();
         }
 
+        /// <summary>
+        /// The match's player of the match, picked by <see cref="CricketMatchAwards"/> — the same
+        /// award the match screen shows (best on the winning side), so the two never disagree.
+        /// </summary>
         private void AddPlayerOfMatch(CricketMatch match, Dictionary<int, CricketFantasyPoints.Breakdown> points,
-            Dictionary<int, MatchLine> lines)
+            Dictionary<int, MatchLine> lines, IReadOnlyDictionary<int, CricketRole> roles)
         {
-            var (playerId, best) = points.OrderByDescending(p => p.Value.Total).First();
+            if (CricketMatchAwards.Build(match, roles).PlayerOfMatch is not { } award) return;
+            var playerId = award.PlayerId;
+            var best = points[playerId];
             var line = lines.GetValueOrDefault(playerId) ?? new MatchLine();
 
             var parts = new List<string>();
@@ -582,6 +668,36 @@ public class CricketStatsService : ICricketStatsService
                 Points = best.Total,
                 Summary = string.Join(" · ", parts)
             });
+        }
+
+        /// <summary>Every player's raw figures, for career pages to add up across tournaments.</summary>
+        public Dictionary<int, CricketPlayerFigures> Figures()
+        {
+            var ids = _appearances.Keys.Concat(_bat.Keys).Concat(_bowl.Keys).Concat(_field.Keys).Concat(_mvp.Keys).ToHashSet();
+            var result = new Dictionary<int, CricketPlayerFigures>();
+            foreach (var id in ids)
+            {
+                var f = new CricketPlayerFigures { Matches = MatchesPlayed(id) };
+                if (_bat.TryGetValue(id, out var b))
+                {
+                    f.Innings = b.Innings; f.NotOuts = b.NotOuts; f.Runs = b.Runs; f.BallsFaced = b.Balls;
+                    f.Fours = b.Fours; f.Sixes = b.Sixes; f.Fifties = b.Fifties; f.Hundreds = b.Hundreds; f.Ducks = b.Ducks;
+                    f.High = b.High; f.HighNotOut = b.HighNotOut;
+                }
+                if (_bowl.TryGetValue(id, out var w))
+                {
+                    f.BowlingInnings = w.Innings; f.LegalBalls = w.LegalBalls; f.Overs = w.Overs; f.RunsConceded = w.Runs;
+                    f.Wickets = w.Wickets; f.Maidens = w.Maidens; f.Hauls3 = w.Hauls3; f.Hauls5 = w.Hauls5;
+                    f.BestWickets = w.BestWickets; f.BestRuns = w.BestRuns;
+                }
+                if (_field.TryGetValue(id, out var fl))
+                {
+                    f.Catches = fl.Catches; f.Stumpings = fl.Stumpings; f.RunOuts = fl.RunOuts;
+                }
+                if (_mvp.TryGetValue(id, out var m)) f.MvpPoints = m.Total;
+                result[id] = f;
+            }
+            return result;
         }
 
         private string Name(int id) => _who.TryGetValue(id, out var w) ? w.Name : $"Player {id}";

@@ -1,7 +1,7 @@
 # Accounts, sign-in, role permissions and tournament access
 
-Phases 1–5 of `docs/accounts-and-access-plan.md`: people sign in with a code emailed to them (no
-passwords in the apps), every request says who they are, each kind of account (role) may call only the
+Phases 1–5 of `docs/accounts-and-access-plan.md` and 6B of `docs/phase-6-plan.md`: people sign in
+with a code sent to their email or, by text, their mobile number (no passwords in the apps), every request says who they are, each kind of account (role) may call only the
 services ticked for it, inside a tournament only its owners and scorers may change it (its players
 may look), squad places link to people's accounts, people can delete their account, and admins run
 all of it from the admin portal (code + password).
@@ -9,21 +9,42 @@ all of it from the admin portal (code + password).
 ## The flow
 
 ```
-AUTH_OTP_SEND   { email }                 → { email, expiresInSeconds: 300, resendAfterSeconds: 60 }
-                                            (same answer whether or not the email has an account)
-AUTH_OTP_VERIFY { email, otp }            → { outcome: "SignedIn", sessionToken, sessionId, expiresAt, user }
-                                            or, for a new email: { outcome: "NeedsName" }
-AUTH_OTP_VERIFY { email, otp, name }      → { outcome: "SignedIn", isNewUser: true, … }  (account created)
+AUTH_OPTIONS                              → { phone: true|false, defaultCountryCode: "+91" }
+AUTH_OTP_SEND   { contact }               → { sentTo, channel: "Email"|"Sms", expiresInSeconds: 300, resendAfterSeconds: 60 }
+                                            (same answer whether or not it has an account)
+AUTH_OTP_VERIFY { contact, otp }          → { outcome: "SignedIn", sessionToken, sessionId, expiresAt, user }
+                                            or, for a new email or number: { outcome: "NeedsName" }
+AUTH_OTP_VERIFY { contact, otp, name }    → { outcome: "SignedIn", isNewUser: true, … }  (account created)
 ```
+
+**Email or mobile number (phase 6B).** `contact` is one field: anything with an @ is an email
+(lower-cased), anything else a mobile number, stored in E.164 (`+919876543210`; typed without a
+country code it's taken as +91, and an Indian mobile must be 10 digits starting 6–9). An account has
+an email, a number or both, at least one, each proved by a code. Numbers work only when the server
+can text codes (`Sms:Provider` not `None`); otherwise `AUTH_OPTIONS.phone` is false, the apps hide
+every number field, and a number is refused: "Mobile numbers can't be used yet. Use your email
+address." The admin portal still sends `{ email }` (email only) — admins sign in to the portal by email.
 
 Sign-up and sign-in are the same two steps. The app keeps `sessionToken` (phone keychain / browser
 storage) and seals it into every request's payload as `session` (see `Gateway/README.md`); the
 clear header carries `sessionId`, which is not secret.
 
 Signed in: `AUTH_LOGOUT` (this device), `AUTH_LOGOUT_ALL` (every device), `ACCOUNT_GET`,
-`ACCOUNT_UPDATE { name }`.
+`ACCOUNT_UPDATE { name }`, and the account's email and number:
 
-Only `HEALTH_CHECK`, `AUTH_OTP_SEND` and `AUTH_OTP_VERIFY` work without a session
+```
+ACCOUNT_CONTACT_SEND   { contact }        → a code (purpose AddContact) to the new email or number;
+                                            409 "This email is used by another account." if taken
+ACCOUNT_CONTACT_VERIFY { contact, otp }   → account: added, or replacing the one of that kind;
+                                            squad places waiting on it link now
+ACCOUNT_CONTACT_REMOVE { kind }           → account; refused for the last way to sign in, and for an
+                                            admin's email (the portal sends codes there)
+```
+
+`ACCOUNT_GET` says which can go (`canRemoveEmail`, `canRemovePhone`).
+
+Only `HEALTH_CHECK`, `AUTH_OPTIONS`, `AUTH_OTP_SEND` and `AUTH_OTP_VERIFY` (and the portal's
+`ADMIN_AUTH_SIGN_IN`) work without a session
 (`[AllowAnonymousService]`; the architecture tests hold the list). Everything else answers **401**,
 which sends both apps back to their sign-in screen with the message:
 
@@ -36,12 +57,18 @@ which sends both apps back to their sign-in screen with the message:
 
 ## Codes
 
-- 6 digits from the OS's secure random source; stored as SHA-256 of `email|code`; valid 5 minutes;
-  5 wrong tries kill it; used once; a new code cancels the previous one.
-- Limits (all in `Auth` settings): one code a minute and 5 an hour per email; 10 an hour per device;
-  30 an hour per network address. Answer 429 with how long to wait.
-- If the email can't be sent: 503 "We couldn't send the email just now…", and the code is removed
-  so it doesn't count against the limits. The failure is in ErrorLogs; the SMTP call in RemoteLogs.
+- 6 digits from the OS's secure random source; stored as SHA-256 of `target|code` (the email or
+  number); valid 5 minutes; 5 wrong tries kill it; used once; a new code cancels the previous one.
+  Purposes `SignIn`, `DeleteAccount`, `AddContact` never stand in for each other.
+- Limits (all in `Auth` settings): one code a minute per email or number; 5 an hour per email, 3 an
+  hour per number (texts cost money); 10 an hour per device; 30 an hour per network address. Answer
+  429 with how long to wait.
+- If the email or text can't be sent: 503 "We couldn't send the email (text message) just now…", and
+  the code is removed so it doesn't count against the limits. The failure is in ErrorLogs; the SMTP
+  call in RemoteLogs.
+- Delivery: `OtpDispatcher` picks the sender per code — email by `Auth:OtpDelivery`, texts by
+  `Sms:Provider`. Choosing an SMS provider means one sender class in `Otp/` plus its value in
+  `SmsProvider`; nothing else changes.
 - Wrong code: "That code isn't right. 4 tries left." Expired or used: "This code has expired. Ask
   for a new one."
 
@@ -168,10 +195,14 @@ index on `Players.TournamentId` + `UserId`; `TournamentId` is copied from the te
   `email`). An account with it → linked now; none yet → `Players.EmailId` waits and the place links
   when that person signs in (`AUTH_OTP_VERIFY`). On an update, no `email` = unchanged, `""` = clear
   and unlink, another address = relink. "Amit Rao is already in Lions in this tournament." if taken.
+- **Mobile number** (phase 6B) — the same, with `phone` (`Players.PhoneNumber`, E.164). Either
+  links; an email and a number of two different people → 409. A linked place stays linked while its
+  email or number still belongs to its person; clearing both unlinks it. The number is never copied
+  from the account (a player's number is theirs to give); owners see it as `phone`.
 - **Join code** — every team has a 6-character `Teams.JoinCode` (no 0/O, 1/I; made with the team,
   older teams got one in the migration). Owners see it on the team (`joinCode`) and can
   `TEAM_JOIN_CODE_RESET`. `TEAM_JOIN_PREVIEW { code }` → the team and its unclaimed names (places
-  with no account and no waiting email), each with a `detail` ("#7 · Batter") to tell two Rahuls
+  with no account and no waiting email or number), each with a `detail` ("#7 · Batter") to tell two Rahuls
   apart; `TEAM_JOIN { code, playerId }` claims one, `playerId: null` joins as a new player. Refused
   when the tournament is over or you're already in one of its teams. 10 wrong codes in 15 minutes →
   429 (in memory, like the replay cache).
@@ -193,15 +224,16 @@ shown to owners only (`email` / `joinCode` are null for everyone else); `isMe` m
 
 ## Deleting an account (phase 4)
 
-`ACCOUNT_DELETE_PREVIEW` says what will happen and emails a code (purpose `DeleteAccount`, its own
-wording, same limits as sign-in codes); `ACCOUNT_DELETE { otp }` does it:
+`ACCOUNT_DELETE_PREVIEW` says what will happen and sends a code (purpose `DeleteAccount`, its own
+wording, same limits as sign-in codes) to the email, or by text to an account with only a number;
+`ACCOUNT_DELETE { otp }` does it:
 
 | | |
 |---|---|
 | Tournaments only they own | deleted, for everyone in them (the preview names them and counts the others) |
 | Ones they created with other owners | the longest-standing other owner becomes the creator |
 | Every other membership | removed; any match they were scoring is released |
-| Squad places | unlinked (names stay); places waiting for their email lose it |
+| Squad places | unlinked (names stay); places waiting for their email or number lose it |
 | The account row | kept (foreign keys), `Name` "Deleted user", email and phone cleared, `DeletedOn` set |
 | Sessions, codes, cricket profile | removed — every device is signed out at once |
 
@@ -257,7 +289,8 @@ Every change to permissions or ticks reloads the request check at once.
 `deploy/sql/02-permissions.sql`); `TournamentMembers` plus the new tournament and match columns
 (script `deploy/sql/03-tournament-access.sql`); `UserCricketProfiles`, `Players.UserId/EmailId/TournamentId`,
 `Teams.JoinCode` (script `deploy/sql/05-player-accounts.sql`); the portal password columns on `Users` and
-`UserSessions.IsPortal` (script `deploy/sql/06-admin-portal.sql`). UserId 1 is **System**: no email, can't sign in, owns
+`UserSessions.IsPortal` (script `deploy/sql/06-admin-portal.sql`); `Users.PhoneVerifiedAt` and
+`Players.PhoneNumber` (script `deploy/sql/07-phone-identity.sql`). UserId 1 is **System**: no email, can't sign in, owns
 pre-accounts data and is `CrdBy` on seeded and synced rows.
 
 ## Settings
@@ -271,8 +304,15 @@ pre-accounts data and is `CrdBy` on seeded and synced rows.
   "Host": "smtp.gmail.com", "Port": 587, "EnableSsl": true,
   "UserName": "you@gmail.com", "Password": "<app password>",
   "FromAddress": "you@gmail.com", "FromName": "Tournament Scheduler"
+},
+"Sms": {
+  "Provider": "None"               // "Log" to test numbers; a real provider once chosen
 }
 ```
+
+- **`"Sms": { "Provider": "Log" }`** (the default in Development) turns mobile numbers on in both
+  apps and writes texted codes to the same log and `otp-codes.txt` as Log emails — the same warning
+  applies. `None` (the default elsewhere) keeps numbers off.
 
 - **Gmail**: turn on 2-step verification, create an *App password* (Google Account → Security),
   use it as `Password`. About 500 emails a day. **Brevo** (free, 300/day): host

@@ -41,6 +41,9 @@ public sealed class AuthOptions
     public int OtpResendSeconds { get; set; } = 60;
     public int OtpPerEmailPerHour { get; set; } = 5;
 
+    /// <summary>Codes one mobile number may be texted an hour (also one a minute). Fewer than email: each text costs money.</summary>
+    public int OtpPerPhonePerHour { get; set; } = 3;
+
     /// <summary>Across all emails, from one device or one network address.</summary>
     public int OtpPerDevicePerHour { get; set; } = 10;
     public int OtpPerIpPerHour { get; set; } = 30;
@@ -81,4 +84,35 @@ public sealed class SmtpOptions
     public int TimeoutSeconds { get; set; } = 15;
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Host) && !string.IsNullOrWhiteSpace(FromAddress);
+}
+
+/// <summary>
+/// The <c>Sms</c> section: how sign-in codes reach a mobile number (phase 6B). <c>None</c> (the
+/// default) switches phone numbers off in both apps; <c>Log</c> writes texted codes to the log and
+/// <see cref="AuthOptions.DevCodeFile"/> like email codes, for development and LAN testing.
+/// A real provider adds its value here, a sender class in Auth/Otp, and uses the keys below.
+/// The keys belong in the server's own appsettings or user secrets, never in the repo.
+/// </summary>
+public sealed class SmsOptions
+{
+    public const string Section = "Sms";
+
+    public SmsProvider Provider { get; set; } = SmsProvider.None;
+
+    /// <summary>The provider's API key.</summary>
+    public string? ApiKey { get; set; }
+
+    /// <summary>The registered sender name the text arrives from (six letters in India).</summary>
+    public string? SenderId { get; set; }
+
+    /// <summary>India's DLT rules: every text must match a registered template, quoted by its id.</summary>
+    public string? TemplateId { get; set; }
+
+    public bool IsEnabled => Provider != SmsProvider.None;
+}
+
+public enum SmsProvider
+{
+    None,
+    Log
 }

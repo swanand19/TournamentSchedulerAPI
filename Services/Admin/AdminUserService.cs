@@ -48,17 +48,19 @@ public class AdminUserService : ServiceBase, IAdminUserService
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
-    /// <summary>Everyone but System and deleted accounts, newest first; <paramref name="search"/> matches name or email.</summary>
+    /// <summary>Everyone but System and deleted accounts, newest first; <paramref name="search"/> matches name, email or mobile number.</summary>
     public async Task<ServiceResult<PagedResult<AdminUserDto>>> ListAsync(string? search, int? roleId, int? page, int? pageSize)
     {
         var (p, size) = PagedResult<AdminUserDto>.Clamp(page, pageSize);
         var term = search?.Trim().ToLowerInvariant();
+        var digits = new string((term ?? "").Where(char.IsAsciiDigit).ToArray()); // "98765 43210" finds +919876543210
 
         IQueryable<User> Filter(IQueryable<User> q)
         {
             q = q.Where(u => u.DeletedOn == null && u.UserId != SystemUser.Id);
             if (!string.IsNullOrEmpty(term))
-                q = q.Where(u => u.Name.ToLower().Contains(term) || (u.EmailId != null && u.EmailId.Contains(term)));
+                q = q.Where(u => u.Name.ToLower().Contains(term) || (u.EmailId != null && u.EmailId.Contains(term))
+                                 || (digits.Length >= 3 && u.PhoneNumber != null && u.PhoneNumber.Contains(digits)));
             if (roleId.HasValue)
                 q = q.Where(u => u.RoleId == roleId);
             return q;
@@ -154,7 +156,7 @@ public class AdminUserService : ServiceBase, IAdminUserService
             .Where(u => ids.Contains(u.UserId))
             .Select(u => new
             {
-                u.UserId, u.Name, u.EmailId, u.RoleId, RoleName = u.Role!.RoleName, u.IsDisabled, u.Crd, u.LastLoginAt,
+                u.UserId, u.Name, u.EmailId, u.PhoneNumber, u.RoleId, RoleName = u.Role!.RoleName, u.IsDisabled, u.Crd, u.LastLoginAt,
                 HasPassword = u.PasswordHash != null
             }), tracking: false);
         var sessions = (await _sessions.QueryAsync(q => q
@@ -169,6 +171,7 @@ public class AdminUserService : ServiceBase, IAdminUserService
             UserId = u.UserId,
             Name = u.Name,
             Email = u.EmailId,
+            Phone = u.PhoneNumber,
             RoleId = u.RoleId,
             RoleName = u.RoleName,
             IsBlocked = u.IsDisabled,

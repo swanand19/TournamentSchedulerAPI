@@ -16,14 +16,14 @@ public interface IAccountDeletionService
 
 /// <summary>
 /// Deleting your own account (docs/accounts-and-access-plan.md §9). The preview says what will
-/// happen and emails a code; the code confirms it. The account row stays, anonymised, so every
-/// foreign key stays valid:
+/// happen and sends a code (by email, or by text to an account with only a number); the code
+/// confirms it. The account row stays, anonymised, so every foreign key stays valid:
 /// <list type="bullet">
 /// <item>tournaments you're the only owner of are deleted (for everyone in them);</item>
 /// <item>ones you created that have other owners pass to the longest-standing of them;</item>
 /// <item>you're taken off every other tournament, and stop holding any match's scoring;</item>
 /// <item>your squad places are unlinked — the names stay on the scorecards;</item>
-/// <item>sessions, codes and your cricket profile are removed; the email is freed, so signing up
+/// <item>sessions, codes and your cricket profile are removed; the email and number are freed, so signing up
 /// again with it makes a new, empty account.</item>
 /// </list>
 /// </summary>
@@ -85,17 +85,17 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
     public async Task<ServiceResult<AccountDeletionPreviewDto>> PreviewAsync(ClientInfo client)
     {
         var user = await _users.GetByIdAsync(_currentUser.UserId);
-        if (user?.EmailId == null) return NotFound("Account not found.");
+        if (user == null || CodeGoesTo(user) is not { } to) return NotFound("Account not found.");
         if (user.RoleId == RoleIds.Admin) return Forbidden("Admin accounts can't be deleted from the app.");
 
         var plan = await MakePlan(user.UserId);
 
-        var sent = await _codes.SendAsync(user.EmailId, OtpPurpose.DeleteAccount, client);
+        var sent = await _codes.SendAsync(to, OtpPurpose.DeleteAccount, client);
         if (!sent.IsOk) return new ServiceError(sent.Outcome, sent.Error);
 
         return Success(new AccountDeletionPreviewDto
         {
-            CodeSentTo = user.EmailId,
+            CodeSentTo = to.Value,
             ExpiresInSeconds = sent.Value!.ExpiresInSeconds,
             ResendAfterSeconds = sent.Value.ResendAfterSeconds,
             TournamentsDeleted = plan.Delete.Select(t => new DeletedTournamentDto { Id = t.Id, Name = t.Name, Sport = t.Sport, OtherPeople = t.OtherPeople }).ToList(),
@@ -108,11 +108,12 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
     public async Task<ServiceResult<object>> DeleteAsync(DeleteAccountRequest request)
     {
         var user = await _users.GetByIdAsync(_currentUser.UserId);
-        if (user?.EmailId == null) return NotFound("Account not found.");
+        if (user == null || CodeGoesTo(user) is not { } to) return NotFound("Account not found.");
         if (user.RoleId == RoleIds.Admin) return Forbidden("Admin accounts can't be deleted from the app.");
 
         var email = user.EmailId;
-        var (_, wrong) = await _codes.CheckAsync(email, OtpPurpose.DeleteAccount, request.Otp);
+        var phone = user.PhoneNumber;
+        var (_, wrong) = await _codes.CheckAsync(to, OtpPurpose.DeleteAccount, request.Otp);
         if (wrong is { } error) return error;
 
         var me = user.UserId;
@@ -131,7 +132,9 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
         // Rows inside deleted tournaments go with them; touching them as well would race the cascade.
         _members.RemoveRange(await _members.ListAsync(m => m.UserId == me && !deleted.Contains(m.TournamentId)));
 
-        foreach (var place in await _players.ListAsync(p => (p.UserId == me || p.EmailId == email) && !deleted.Contains(p.TournamentId)))
+        foreach (var place in await _players.ListAsync(p =>
+                     (p.UserId == me || (email != null && p.EmailId == email) || (phone != null && p.PhoneNumber == phone))
+                     && !deleted.Contains(p.TournamentId)))
             _links.Unlink(place);
 
         IEnumerable<IScoredMatch> held =
@@ -153,18 +156,25 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
 
         // The person: signed out everywhere, nothing left that says who they were.
         _sessions.RemoveRange(await _sessions.ListAsync(s => s.UserId == me));
-        _challenges.RemoveRange(await _challenges.ListAsync(c => c.Target == email));
+        _challenges.RemoveRange(await _challenges.ListAsync(c => c.Target == email || c.Target == phone));
         if (await _profiles.GetByIdAsync(me) is { } profile) _profiles.Remove(profile);
 
         user.Name = DeletedName;
         user.EmailId = null;
         user.PhoneNumber = null;
+        user.EmailVerifiedAt = user.PhoneVerifiedAt = null;
         user.DeletedOn = now;
         user.Modified(now, me);
 
         await _unitOfWork.SaveChangesAsync();
         return Ok(new { deleted = true, tournamentsDeleted = deleted.Count });
     }
+
+    /// <summary>The confirming code goes to the email, or, for an account with only a number, by text.</summary>
+    private static Contact? CodeGoesTo(User user) =>
+        user.EmailId != null ? new Contact(ContactKind.Email, user.EmailId)
+        : user.PhoneNumber != null ? new Contact(ContactKind.Phone, user.PhoneNumber)
+        : null;
 
     /// <summary>The same reckoning for the preview and the deletion, so what was shown is what happens.</summary>
     private async Task<Plan> MakePlan(int me)

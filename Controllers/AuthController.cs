@@ -5,13 +5,15 @@ using TournamentScheduler.Api.Auth.Permissions;
 using TournamentScheduler.Api.Gateway;
 using TournamentScheduler.Api.Http;
 using TournamentScheduler.Api.Models.Accounts;
+using TournamentScheduler.Api.Services;
 using TournamentScheduler.Api.Services.Accounts;
 
 namespace TournamentScheduler.Api.Controllers;
 
 /// <summary>
-/// Signing in and out. The two sign-in steps are the only services (with the health check) a
-/// signed-out app can call. They still go through the encrypted gateway like everything else.
+/// Signing in and out. The sign-in options and the two sign-in steps are the only services (with
+/// the health check) a signed-out app can call. They still go through the encrypted gateway like
+/// everything else.
 /// </summary>
 [ApiController]
 [Route("api/auth")]
@@ -26,7 +28,14 @@ public class AuthController : ApiController
         _accounts = accounts;
     }
 
-    // POST api/auth/otp/send — emails a code; the same answer whether or not the email has an account
+    // GET api/auth/options — what the sign-in screen offers (mobile numbers only once texts are set up)
+    [HttpGet("options")]
+    [ServiceRequestId("AUTH_OPTIONS")]
+    [AllowAnonymousService]
+    public ActionResult<ApiResponse<AuthOptionsDto>> Options() =>
+        Respond(ServiceResult<AuthOptionsDto>.Ok(_accounts.GetOptions()));
+
+    // POST api/auth/otp/send — { contact } (email or mobile number); the same answer whether or not it has an account
     [HttpPost("otp/send")]
     [ServiceRequestId("AUTH_OTP_SEND")]
     [AllowAnonymousService]

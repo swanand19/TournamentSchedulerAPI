@@ -188,8 +188,8 @@ public class TeamService : ServiceBase, ITeamService
         if (request.Cricket != null)
             player.Cricket = CricketProfiles.ForPlayer(request.Cricket);
 
-        // With an email that has an account, the place is linked now and takes the account's name.
-        if (await _links.SetEmailAsync(player, tournamentId, request.Email) is { } linkError)
+        // With an email or number that has an account, the place is linked now and takes the account's name.
+        if (await _links.SetContactsAsync(player, tournamentId, request.Email, request.Phone) is { } linkError)
             return linkError;
 
         _players.Add(player);
@@ -218,7 +218,7 @@ public class TeamService : ServiceBase, ITeamService
         if (CricketProfiles.Problem(request.Cricket) is { } cricketError)
             return BadRequest(cricketError);
 
-        if (await _links.SetEmailAsync(player, tournamentId, request.Email) is { } linkError)
+        if (await _links.SetContactsAsync(player, tournamentId, request.Email, request.Phone) is { } linkError)
             return linkError;
 
         player.Position = request.Position;
@@ -260,7 +260,7 @@ public class TeamService : ServiceBase, ITeamService
             return Forbidden("Only the tournament's owners can unlink another player.");
         if (_context.Status is TournamentStatus.Completed or TournamentStatus.Cancelled)
             return Conflict("This tournament is over, so its squads can't be changed.");
-        if (!player.IsLinked && player.EmailId == null)
+        if (!player.IsLinked && player.EmailId == null && player.PhoneNumber == null)
             return Conflict("This player isn't linked to an account.");
 
         _links.Unlink(player);
@@ -306,7 +306,7 @@ public class TeamService : ServiceBase, ITeamService
         return code;
     }
 
-    /// <summary>What this caller may see: emails and the join code for owners; which place is theirs.</summary>
+    /// <summary>What this caller may see: emails, numbers and the join code for owners; which place is theirs.</summary>
     private void Present(Team team)
     {
         team.VisibleJoinCode = _context.IsOwner ? team.JoinCode : null;
@@ -317,5 +317,6 @@ public class TeamService : ServiceBase, ITeamService
     {
         player.IsMe = player.UserId != null && player.UserId == _currentUser.UserId;
         player.Email = _context.IsOwner ? player.EmailId : null;
+        player.Phone = _context.IsOwner ? player.PhoneNumber : null;
     }
 }

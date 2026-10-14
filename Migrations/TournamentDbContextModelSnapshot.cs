@@ -356,6 +356,9 @@ namespace TournamentScheduler.Api.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<DateTime?>("PhoneVerifiedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
 
@@ -1211,6 +1214,10 @@ namespace TournamentScheduler.Api.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("Position")
                         .HasColumnType("nvarchar(max)");
 
@@ -1226,6 +1233,8 @@ namespace TournamentScheduler.Api.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("EmailId");
+
+                    b.HasIndex("PhoneNumber");
 
                     b.HasIndex("UserId");
 

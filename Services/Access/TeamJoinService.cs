@@ -55,7 +55,7 @@ public class TeamJoinService : ServiceBase, ITeamJoinService
         if (error is { } e) return e;
 
         var places = await _players.ListAsync(
-            p => p.TeamId == team!.TeamId && p.UserId == null && p.EmailId == null,
+            p => p.TeamId == team!.TeamId && p.UserId == null && p.EmailId == null && p.PhoneNumber == null,
             q => PlayerQueries.WithCricketProfile(q).OrderBy(p => p.Name).ThenBy(p => p.JerseyNumber),
             tracking: false);
 
@@ -81,10 +81,10 @@ public class TeamJoinService : ServiceBase, ITeamJoinService
         Player place;
         if (request.PlayerId is { } playerId)
         {
-            // Names the organiser gave an email are waiting for that person, so they can't be picked here.
+            // Names the organiser gave an email or number are waiting for that person, so they can't be picked here.
             var picked = await _players.FirstOrDefaultAsync(p => p.Id == playerId && p.TeamId == team!.TeamId, PlayerQueries.WithCricketProfile);
             if (picked == null) return NotFound("That name isn't in this team any more. Pick again.");
-            if (picked.UserId != null || picked.EmailId != null) return Conflict("Someone else has just claimed that name. Pick again.");
+            if (picked.UserId != null || picked.EmailId != null || picked.PhoneNumber != null) return Conflict("Someone else has just claimed that name. Pick again.");
             place = picked;
         }
         else

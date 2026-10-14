@@ -89,6 +89,9 @@ public class CreatePlayerRequest
     /// otherwise it links when they sign up.
     /// </summary>
     public string? Email { get; set; }
+
+    /// <summary>Optional: the player's mobile number, linking the same way as the email.</summary>
+    public string? Phone { get; set; }
 }
 
 public class UpdatePlayerRequest
@@ -99,10 +102,14 @@ public class UpdatePlayerRequest
     public int? JerseyNumber { get; set; }
 
     /// <summary>
-    /// Null leaves it as it is (older apps never send it); "" clears it and unlinks the place; a
-    /// different address unlinks it and links to that one instead.
+    /// Null leaves it as it is (older apps never send it); "" clears it; a different address links
+    /// the place to that address's account instead. A place stays linked while its email or
+    /// <see cref="Phone"/> still belongs to the linked person; clearing both unlinks it.
     /// </summary>
     public string? Email { get; set; }
+
+    /// <summary>The mobile number, with the same rules as <see cref="Email"/>.</summary>
+    public string? Phone { get; set; }
 
     /// <summary>Ignored once the place is linked: the player keeps their own profile on their account.</summary>
     public CricketProfileInput? Cricket { get; set; }

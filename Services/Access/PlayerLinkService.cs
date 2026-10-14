@@ -9,11 +9,12 @@ namespace TournamentScheduler.Api.Services.Access;
 public interface IPlayerLinkService
 {
     /// <summary>
-    /// An owner set a squad place's email (adding or editing it): null leaves it alone, "" clears
-    /// it and unlinks, an address with an account links to it now, one without waits for sign-up.
-    /// Stages the change; the caller saves.
+    /// An owner set a squad place's email and/or mobile number (adding or editing it). For each,
+    /// null leaves it alone and "" clears it. If either belongs to an account the place is linked
+    /// to it now; otherwise it waits for that person to sign in. A place stays linked while either
+    /// still belongs to its person. Stages the change; the caller saves.
     /// </summary>
-    Task<ServiceError?> SetEmailAsync(Player place, int tournamentId, string? email);
+    Task<ServiceError?> SetContactsAsync(Player place, int tournamentId, string? email, string? phone);
 
     /// <summary>Links a place to an account: the account's name, its email, and (cricket) its profile.</summary>
     Task LinkAsync(Player place, User user, Sport sport);
@@ -21,10 +22,13 @@ public interface IPlayerLinkService
     /// <summary>The place goes back to being just a name. The name stays: it's on the scorecards.</summary>
     void Unlink(Player place);
 
-    /// <summary>On sign-in: places an organiser gave this email, waiting for the account. Returns how many were linked.</summary>
+    /// <summary>
+    /// On sign-in, or when the person adds an email or number: places an organiser gave either,
+    /// waiting for the account. Returns how many were linked.
+    /// </summary>
     Task<int> LinkWaitingPlacesAsync(User user);
 
-    /// <summary>After the person changes their name or cricket profile: every place linked to them follows.</summary>
+    /// <summary>After the person changes their name, email or cricket profile: every place linked to them follows.</summary>
     Task FollowAccountAsync(User user, UserCricketProfile? profile);
 
     /// <summary>The team the person already plays for in this tournament, if any.</summary>
@@ -56,26 +60,48 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
         _profiles = profiles;
     }
 
-    public async Task<ServiceError?> SetEmailAsync(Player place, int tournamentId, string? email)
+    public async Task<ServiceError?> SetContactsAsync(Player place, int tournamentId, string? email, string? phone)
     {
-        if (email == null) return null;
+        if (email == null && phone == null) return null;
 
-        if (string.IsNullOrWhiteSpace(email))
+        var newEmail = place.EmailId;
+        if (email != null)
         {
-            Unlink(place);
+            newEmail = string.IsNullOrWhiteSpace(email) ? null : AccountService.NormaliseEmail(email);
+            if (newEmail == null && !string.IsNullOrWhiteSpace(email))
+                return BadRequest("Enter a valid email address for the player, or leave it empty.");
+        }
+
+        var newPhone = place.PhoneNumber;
+        if (phone != null)
+        {
+            newPhone = string.IsNullOrWhiteSpace(phone) ? null : Contacts.NormalisePhone(phone);
+            if (newPhone == null && !string.IsNullOrWhiteSpace(phone))
+                return BadRequest("Enter a valid mobile number for the player, or leave it empty.");
+        }
+
+        if (newEmail == place.EmailId && newPhone == place.PhoneNumber) return null;
+
+        var byEmail = newEmail == null ? null : await _users.FirstOrDefaultAsync(u => u.EmailId == newEmail && u.DeletedOn == null && !u.IsDisabled);
+        var byPhone = newPhone == null ? null : await _users.FirstOrDefaultAsync(u => u.PhoneNumber == newPhone && u.DeletedOn == null && !u.IsDisabled);
+        if (byEmail != null && byPhone != null && byEmail.UserId != byPhone.UserId)
+            return Conflict("That email and mobile number belong to two different people. Give one of them.");
+        var user = byEmail ?? byPhone;
+
+        // Still the same person: keep the link, and the number the owner typed.
+        if (user != null && user.UserId == place.UserId)
+        {
+            place.EmailId = user.EmailId; // a linked place shows the account's email
+            place.PhoneNumber = newPhone;
             return null;
         }
 
-        var normalised = AccountService.NormaliseEmail(email);
-        if (normalised == null) return BadRequest("Enter a valid email address for the player, or leave it empty.");
-        if (normalised == place.EmailId) return null;
-
-        var user = await _users.FirstOrDefaultAsync(u => u.EmailId == normalised && u.DeletedOn == null && !u.IsDisabled);
         if (user != null && await TeamAlreadyInAsync(tournamentId, user.UserId, place.Id) is { } team)
             return Conflict($"{user.Name} is already in {team} in this tournament.");
 
         Unlink(place);
-        place.EmailId = normalised;
+        place.EmailId = newEmail;
+        place.PhoneNumber = newPhone;
         if (user != null)
             await LinkAsync(place, user, await SportOf(tournamentId));
         return null;
@@ -108,14 +134,17 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
         place.UserId = null;
         place.User = null;
         place.EmailId = null; // or the next sign-in would link it straight back
+        place.PhoneNumber = null;
     }
 
     public async Task<int> LinkWaitingPlacesAsync(User user)
     {
-        if (user.EmailId == null) return 0;
+        if (user.EmailId == null && user.PhoneNumber == null) return 0;
 
+        var email = user.EmailId;
+        var phone = user.PhoneNumber;
         var waiting = await _players.ListAsync(
-            p => p.EmailId == user.EmailId && p.UserId == null,
+            p => p.UserId == null && ((email != null && p.EmailId == email) || (phone != null && p.PhoneNumber == phone)),
             q => Data.Queries.PlayerQueries.WithCricketProfile(q).OrderBy(p => p.Id));
         if (waiting.Count == 0) return 0;
 
@@ -145,6 +174,7 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
         foreach (var place in places)
         {
             place.Name = user.Name;
+            place.EmailId = user.EmailId; // a linked place shows the account's email; the number stays what the owner typed
             if (profile == null || sports.GetValueOrDefault(place.TournamentId) != Sport.Cricket) continue;
 
             if (place.Cricket == null) place.Cricket = CricketProfiles.ForPlayer(profile);
