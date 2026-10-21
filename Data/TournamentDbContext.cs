@@ -22,6 +22,7 @@ public class TournamentDbContext : DbContext
     public DbSet<MatchEvent> MatchEvents => Set<MatchEvent>();
     public DbSet<PenaltyKick> PenaltyKicks => Set<PenaltyKick>();
     public DbSet<CricketMatch> CricketMatches => Set<CricketMatch>();
+    public DbSet<Models.Knockouts.KnockoutFixture> KnockoutFixtures => Set<Models.Knockouts.KnockoutFixture>();
     public DbSet<PlayerCricketProfile> PlayerCricketProfiles => Set<PlayerCricketProfile>();
     public DbSet<CricketMatchPlayer> CricketMatchPlayers => Set<CricketMatchPlayer>();
     public DbSet<CricketInnings> CricketInnings => Set<CricketInnings>();
@@ -78,10 +79,10 @@ public class TournamentDbContext : DbContext
             .HasForeignKey(s => s.TournamentId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Not unique: in amateur sides two players may wear the same number (decided 2026-10-21).
+        // The index stays because squads are listed by number.
         modelBuilder.Entity<Player>()
-            .HasIndex(p => new { p.TeamId, p.JerseyNumber })
-            .IsUnique()
-            .HasFilter("[JerseyNumber] IS NOT NULL");
+            .HasIndex(p => new { p.TeamId, p.JerseyNumber });
 
         modelBuilder.Entity<Tournament>()
             .HasMany(t => t.Matches)
@@ -179,6 +180,36 @@ public class TournamentDbContext : DbContext
             .WithMany()
             .HasForeignKey(m => m.AwayTeamId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // --- Knockouts ----------------------------------------------------
+        // The tournament owns its knockout fixtures; a match playing one links to it with Restrict,
+        // for the same multiple-cascade-path reason as SavedFixture (the match is the tournament's too).
+
+        modelBuilder.Entity<Models.Knockouts.KnockoutFixture>(fixture =>
+        {
+            fixture.HasOne(f => f.Tournament)
+                .WithMany()
+                .HasForeignKey(f => f.TournamentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            fixture.HasIndex(f => new { f.TournamentId, f.Order }).IsUnique();
+            fixture.Property(f => f.Label).HasMaxLength(60);
+            fixture.OwnsOne(f => f.Home, slot => slot.Property(s => s.GroupName).HasMaxLength(20));
+            fixture.OwnsOne(f => f.Away, slot => slot.Property(s => s.GroupName).HasMaxLength(20));
+        });
+
+        modelBuilder.Entity<Match>()
+            .HasOne(m => m.KnockoutFixture)
+            .WithMany()
+            .HasForeignKey(m => m.KnockoutFixtureId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Match>().Property(m => m.RoundLabel).HasMaxLength(60);
+
+        modelBuilder.Entity<CricketMatch>()
+            .HasOne(m => m.KnockoutFixture)
+            .WithMany()
+            .HasForeignKey(m => m.KnockoutFixtureId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CricketMatch>().Property(m => m.RoundLabel).HasMaxLength(60);
 
         // The match owns its squad, its innings and its timeline; the innings owns its deliveries.
         // Links out to Player and Team stay Restrict for the same multiple-cascade-path reason.

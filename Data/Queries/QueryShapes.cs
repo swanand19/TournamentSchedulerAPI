@@ -36,17 +36,27 @@ public static class MatchQueries
         .Include(m => m.HomeTeam).ThenInclude(t => t!.Players)
         .Include(m => m.AwayTeam).ThenInclude(t => t!.Players)
         .Include(m => m.MatchPlayers);
+
+    /// <summary>With the knockout fixture it plays (its round), for the champion and the knockout stage.</summary>
+    public static IQueryable<Match> WithKnockoutFixture(IQueryable<Match> q) => q.Include(m => m.KnockoutFixture);
 }
 
 public static class CricketMatchQueries
 {
     public static IQueryable<CricketMatch> WithInnings(IQueryable<CricketMatch> q) => q.Include(m => m.Innings);
 
+    /// <summary>With its innings and knockout fixture: enough to rank a group and settle a knockout slot.</summary>
+    public static IQueryable<CricketMatch> ForKnockouts(IQueryable<CricketMatch> q) => q
+        .Include(m => m.KnockoutFixture)
+        .Include(m => m.Innings).ThenInclude(i => i.Interruptions)
+        .AsSplitQuery();
+
     /// <summary>The match and its chosen players, without the deliveries: the watcher's line-ups.</summary>
     public static IQueryable<CricketMatch> WithSquad(IQueryable<CricketMatch> q) => q.Include(m => m.Squad);
 
-    /// <summary>The whole match: squad, every innings with its deliveries and rain interruptions.</summary>
+    /// <summary>The whole match: squad, every innings with its deliveries and rain interruptions, and its knockout fixture.</summary>
     public static IQueryable<CricketMatch> Full(IQueryable<CricketMatch> q) => q
+        .Include(m => m.KnockoutFixture)
         .Include(m => m.Squad)
         .Include(m => m.Innings).ThenInclude(i => i.Balls)
         .Include(m => m.Innings).ThenInclude(i => i.Interruptions)

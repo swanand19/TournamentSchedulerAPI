@@ -377,6 +377,10 @@ public partial class CricketScoringService
             return CricketResult<CricketMatch>.Success(match);
         }
 
+        if (request.NoResult && match.IsKnockout)
+            return CricketResult<CricketMatch>.Fail(
+                "A knockout match needs a side to go through. If it can't be finished, award it to that side instead (usually the one that finished higher in its group).");
+
         if (request.NoResult)
         {
             match.IsNoResult = true;

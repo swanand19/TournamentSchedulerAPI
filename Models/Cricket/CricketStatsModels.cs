@@ -14,6 +14,12 @@ public class CricketTournamentStats
     public string Basis { get; set; } = string.Empty;
 
     public CricketStatsSummary Summary { get; set; } = new();
+
+    /// <summary>The Final's winner, once it has one (tournaments with a knockout stage).</summary>
+    public int? ChampionTeamId { get; set; }
+    public string? ChampionName { get; set; }
+
+    /// <summary>The group stage's table; knockout matches don't count, and a knockout-only tournament has none.</summary>
     public List<CricketPointsTableGroup> PointsTable { get; set; } = new();
 
     public List<CricketBoard> BattingBoards { get; set; } = new();

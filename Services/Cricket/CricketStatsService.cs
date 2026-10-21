@@ -17,6 +17,9 @@ public interface ICricketStatsService
     /// matches' player of the match — what a career page adds up. Empty when there are none.
     /// </summary>
     Task<CricketTournamentFigures> PlayerFiguresAsync(int tournamentId);
+
+    /// <summary>The team that won the tournament's Final, once it has been played; null otherwise.</summary>
+    Task<int?> ChampionAsync(int tournamentId);
 }
 
 /// <summary>A tournament's figures for career pages: per player, plus the match awards.</summary>
@@ -125,6 +128,14 @@ public class CricketStatsService : ICricketStatsService
         return Build(tournament.Id, tournament.Name, matches, roles);
     }
 
+    public async Task<int?> ChampionAsync(int tournamentId)
+    {
+        var final = await _matches.FirstOrDefaultAsync(
+            m => m.TournamentId == tournamentId && m.KnockoutFixtureId != null && m.KnockoutFixture!.Round == Models.Knockouts.KnockoutRound.Final,
+            tracking: false);
+        return final == null ? null : Knockouts.KnockoutResults.WinnerOf(final);
+    }
+
     public async Task<CricketTournamentFigures> PlayerFiguresAsync(int tournamentId)
     {
         var matches = await _matches.ListAsync(
@@ -184,8 +195,22 @@ public class CricketStatsService : ICricketStatsService
         };
 
         stats.Summary = ledger.Summary(matches, completed, inProgress);
+        if (matches.FirstOrDefault(m => m.KnockoutFixture?.Round == Models.Knockouts.KnockoutRound.Final) is { WinnerTeamId: int champion } final
+            && final.Status == CricketMatchStatus.Completed)
+        {
+            stats.ChampionTeamId = champion;
+            stats.ChampionName = champion == final.HomeTeamId ? final.HomeTeamName : final.AwayTeamName;
+        }
         return stats;
     }
+
+    /// <summary>
+    /// A finished group's teams in finishing order — the points table's own order (points, net run
+    /// rate, head-to-head, wins), so a knockout slot like "Group A, 2nd" always agrees with the table.
+    /// The matches need their innings (with interruptions) for net run rate.
+    /// </summary>
+    public static List<int> RankGroup(List<CricketMatch> groupMatches) =>
+        BuildPointsTable(groupMatches).SelectMany(g => g.Rows).Select(r => r.TeamId).ToList();
 
     // -----------------------------------------------------------------
     // Points table and net run rate
@@ -209,7 +234,9 @@ public class CricketStatsService : ICricketStatsService
     {
         var groups = new List<CricketPointsTableGroup>();
 
-        foreach (var group in matches.GroupBy(m => string.IsNullOrWhiteSpace(m.GroupName) ? "League" : m.GroupName)
+        // The table is the group stage's: knockout matches have no points.
+        foreach (var group in matches.Where(m => !m.IsKnockout)
+                     .GroupBy(m => string.IsNullOrWhiteSpace(m.GroupName) ? "League" : m.GroupName)
                      .OrderBy(g => g.Key))
         {
             var lines = new Dictionary<int, TeamLine>();

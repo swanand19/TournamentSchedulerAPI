@@ -113,6 +113,7 @@ public class WatchService : ServiceBase, IWatchService
             TournamentId = match.TournamentId,
             TournamentName = await TournamentNameAsync(match.TournamentId),
             GroupName = match.GroupName,
+            RoundLabel = match.RoundLabel,
             MatchNumber = match.MatchNumber,
             Phase = phase,
             FormatLine = match.MinutesPerHalf is int minutes
@@ -233,6 +234,7 @@ public class WatchService : ServiceBase, IWatchService
             TournamentId = match.TournamentId,
             TournamentName = await TournamentNameAsync(match.TournamentId),
             GroupName = match.GroupName,
+            RoundLabel = match.RoundLabel,
             MatchNumber = match.MatchNumber,
             Phase = match.Status == CricketMatchStatus.NotStarted ? WatchPhase.Preview
                 : match.IsOver ? WatchPhase.Finished

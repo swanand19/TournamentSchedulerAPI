@@ -180,6 +180,8 @@ public class ProfileService : ServiceBase, IProfileService
                 Stat("minutes", "Minutes", f.MinutesPlayed),
             }));
 
+            AddWinner(career, place, await _football.ChampionAsync(place.TournamentId));
+
             // A completed tournament's top scorer and top assister; level players share the title.
             if (place.Status != TournamentStatus.Completed) continue;
             var field = all[place.TournamentId];
@@ -191,8 +193,24 @@ public class ProfileService : ServiceBase, IProfileService
         {
             Stat("topScorer", "Top scorer", career.Honours.Count(h => h.Kind == "TopScorer")),
             Stat("mostAssists", "Most assists", career.Honours.Count(h => h.Kind == "MostAssists")),
+            Stat("tournamentsWon", "Tournaments won", career.Honours.Count(h => h.Kind == "TournamentWinner")),
         };
         career.Honours = career.Honours.OrderByDescending(h => h.Date).ToList();
+    }
+
+    /// <summary>Their team won the tournament's Final: every player in that squad shares the title.</summary>
+    private static void AddWinner(CareerDto career, Place place, int? champion)
+    {
+        if (champion != place.TeamId) return;
+        career.Honours.Add(new HonourDto
+        {
+            Kind = "TournamentWinner",
+            Title = "Tournament winner",
+            Detail = place.IsCaptain ? $"Captain of {place.TeamName}" : $"With {place.TeamName}",
+            TournamentId = place.TournamentId,
+            TournamentName = place.TournamentName,
+            Date = place.CompletedAt
+        });
     }
 
     private static void AddTitle(CareerDto career, Place place, Dictionary<int, FootballPlayerFigures> field,
@@ -285,6 +303,8 @@ public class ProfileService : ServiceBase, IProfileService
                 });
             }
 
+            AddWinner(career, place, await _cricket.ChampionAsync(place.TournamentId));
+
             // A completed tournament's MVP: the most points, then fewer matches — the MVP board's order.
             if (place.Status == TournamentStatus.Completed && f.MvpPoints > 0)
             {
@@ -312,6 +332,7 @@ public class ProfileService : ServiceBase, IProfileService
             Stat("playerOfMatch", "Player of the match", career.Honours.Count(h => h.Kind == "PlayerOfMatch")),
             Stat("mvpPoints", "MVP points", t.MvpPoints),
             Stat("tournamentMvp", "Tournament MVP", career.Honours.Count(h => h.Kind == "TournamentMvp")),
+            Stat("tournamentsWon", "Tournaments won", career.Honours.Count(h => h.Kind == "TournamentWinner")),
         };
         career.Honours = career.Honours.OrderByDescending(h => h.Date).ToList();
     }

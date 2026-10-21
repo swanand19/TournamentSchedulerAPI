@@ -16,6 +16,13 @@ public class CricketMatchStateDto
     public Accounts.ScoringDto? Scoring { get; set; }
     public int TournamentId { get; set; }
     public string GroupName { get; set; } = string.Empty;
+
+    /// <summary>A knockout match: must have a winner (no tie left standing, no draw, no "no result").</summary>
+    public bool IsKnockout { get; set; }
+
+    /// <summary>"Semi-final 1" for a knockout match; null in a group.</summary>
+    public string? RoundLabel { get; set; }
+
     public int MatchNumber { get; set; }
 
     public int? HomeTeamId { get; set; }
@@ -211,6 +218,9 @@ public class CricketActions
     public bool CanEnforceFollowOn { get; set; }
     public bool CanStartSuperOver { get; set; }
     public bool CanComplete { get; set; }
+
+    /// <summary>"No result" may be recorded (never in a knockout match, which must send a side through).</summary>
+    public bool CanRecordNoResult { get; set; }
 
     /// <summary>Overs may be taken off the innings in play (rain, bad light).</summary>
     public bool CanReduceOvers { get; set; }

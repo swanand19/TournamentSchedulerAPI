@@ -7,7 +7,7 @@ namespace TournamentScheduler.Api.Models.Cricket;
 /// so a tournament's fixtures materialise and list the same way whichever sport it is played under;
 /// everything below <see cref="Rules"/> is where the two diverge.
 /// </summary>
-public class CricketMatch : IScoredMatch
+public class CricketMatch : IScoredMatch, Knockouts.ITournamentMatch
 {
     public int Id { get; set; }
 
@@ -24,9 +24,20 @@ public class CricketMatch : IScoredMatch
     public int TournamentId { get; set; }
     public Tournament? Tournament { get; set; }
 
-    public int SavedFixtureId { get; set; }
+    /// <summary>The group-stage fixture it was made from; null for a knockout match.</summary>
+    public int? SavedFixtureId { get; set; }
     public SavedFixture? SavedFixture { get; set; }
 
+    /// <summary>The knockout match it plays; null in the group stage. As on <see cref="Match"/>.</summary>
+    [JsonIgnore] public int? KnockoutFixtureId { get; set; }
+    [JsonIgnore] public Knockouts.KnockoutFixture? KnockoutFixture { get; set; }
+
+    [JsonIgnore] public bool IsKnockout => KnockoutFixtureId != null;
+
+    /// <summary>"Semi-final 1" for a knockout match; null in a group.</summary>
+    public string? RoundLabel { get; set; }
+
+    /// <summary>The group ("A"); empty for a knockout match.</summary>
     public string GroupName { get; set; } = string.Empty;
     public int MatchNumber { get; set; }
 

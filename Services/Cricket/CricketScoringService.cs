@@ -90,7 +90,9 @@ public partial class CricketScoringService : ICricketScoringService
             return CricketResult<CricketMatch>.Fail("This match has already started.");
 
         if (match.HomeTeamId is null || match.AwayTeamId is null)
-            return CricketResult<CricketMatch>.Fail("Both teams must be known before the match can be set up.");
+            return CricketResult<CricketMatch>.Fail(match.IsKnockout
+                ? $"{match.RoundLabel ?? "This match"} is waiting for its teams: {match.HomeTeamName} v {match.AwayTeamName}. It fills in when those results are in."
+                : "Both teams must be known before the match can be set up.");
 
         // Several matches may be played at once, but a team can only be on one of them. A match set up
         // (toss done) but not yet bowled at counts: both teams are at that ground.
@@ -108,6 +110,14 @@ public partial class CricketScoringService : ICricketScoringService
         var rules = request.Rules ?? CricketRulePresets.Create(request.Preset) ?? new CricketMatchRules();
         if (ValidateRules(rules) is { } ruleError)
             return CricketResult<CricketMatch>.Fail(ruleError);
+
+        // A knockout match must have a winner: a tie goes to a super over (unless the league counts
+        // boundaries or bowls out), and running out of time isn't a draw.
+        if (match.IsKnockout)
+        {
+            if (rules.TieResolution == TieResolution.AllowTie) rules.TieResolution = TieResolution.SuperOver;
+            rules.DrawAllowed = false;
+        }
 
         if (request.TossWinnerTeamId != match.HomeTeamId && request.TossWinnerTeamId != match.AwayTeamId)
             return CricketResult<CricketMatch>.Fail("The toss winner must be one of the two teams.");

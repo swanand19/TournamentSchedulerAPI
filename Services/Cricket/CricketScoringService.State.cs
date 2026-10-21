@@ -18,6 +18,8 @@ public partial class CricketScoringService
             Id = match.Id,
             TournamentId = match.TournamentId,
             GroupName = match.GroupName,
+            IsKnockout = match.IsKnockout,
+            RoundLabel = match.RoundLabel,
             MatchNumber = match.MatchNumber,
             HomeTeamId = match.HomeTeamId,
             AwayTeamId = match.AwayTeamId,
@@ -212,6 +214,8 @@ public partial class CricketScoringService
             CanStartSuperOver = match.Status == CricketMatchStatus.SuperOver && !inningsInProgress
                                 && match.Innings.Count(i => i.IsSuperOver) % 2 == 0,
             CanComplete = !over,
+            // A knockout match needs a side to go through: it can be awarded, never left without a result.
+            CanRecordNoResult = !over && !match.IsKnockout,
             CanEnforceFollowOn = CanEnforceFollowOn(match),
             CanReduceOvers = innings is { Status: InningsStatus.InProgress, IsSuperOver: false, OversLimit: > 1 }
         };

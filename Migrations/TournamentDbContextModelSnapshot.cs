@@ -835,13 +835,20 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<bool>("IsTie")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("KnockoutFixtureId")
+                        .HasColumnType("int");
+
                     b.Property<int>("MatchNumber")
                         .HasColumnType("int");
 
                     b.Property<string>("ResultSummary")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("SavedFixtureId")
+                    b.Property<string>("RoundLabel")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<int?>("SavedFixtureId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ScorerLastSeenAt")
@@ -879,6 +886,8 @@ namespace TournamentScheduler.Api.Migrations
                     b.HasIndex("AwayTeamId");
 
                     b.HasIndex("HomeTeamId");
+
+                    b.HasIndex("KnockoutFixtureId");
 
                     b.HasIndex("SavedFixtureId");
 
@@ -994,6 +1003,42 @@ namespace TournamentScheduler.Api.Migrations
                     b.ToTable("PlayerCricketProfiles");
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Knockouts.KnockoutFixture", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Round")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TournamentId", "Order")
+                        .IsUnique();
+
+                    b.ToTable("KnockoutFixtures");
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Match", b =>
                 {
                     b.Property<int>("Id")
@@ -1068,6 +1113,9 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<bool>("IsPenaltyShootout")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("KnockoutFixtureId")
+                        .HasColumnType("int");
+
                     b.Property<int>("MatchNumber")
                         .HasColumnType("int");
 
@@ -1107,7 +1155,11 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<bool>("RollingSubsAllowed")
                         .HasColumnType("bit");
 
-                    b.Property<int>("SavedFixtureId")
+                    b.Property<string>("RoundLabel")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<int?>("SavedFixtureId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ScorerLastSeenAt")
@@ -1133,6 +1185,8 @@ namespace TournamentScheduler.Api.Migrations
                     b.HasIndex("AwayTeamId");
 
                     b.HasIndex("HomeTeamId");
+
+                    b.HasIndex("KnockoutFixtureId");
 
                     b.HasIndex("SavedFixtureId");
 
@@ -1464,9 +1518,7 @@ namespace TournamentScheduler.Api.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("TeamId", "JerseyNumber")
-                        .IsUnique()
-                        .HasFilter("[JerseyNumber] IS NOT NULL");
+                    b.HasIndex("TeamId", "JerseyNumber");
 
                     b.HasIndex("TournamentId", "UserId")
                         .IsUnique()
@@ -1778,11 +1830,15 @@ namespace TournamentScheduler.Api.Migrations
                         .HasForeignKey("HomeTeamId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("TournamentScheduler.Api.Models.Knockouts.KnockoutFixture", "KnockoutFixture")
+                        .WithMany()
+                        .HasForeignKey("KnockoutFixtureId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("TournamentScheduler.Api.Models.SavedFixture", "SavedFixture")
                         .WithMany()
                         .HasForeignKey("SavedFixtureId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("TournamentScheduler.Api.Models.Tournament", "Tournament")
                         .WithMany("CricketMatches")
@@ -1876,6 +1932,8 @@ namespace TournamentScheduler.Api.Migrations
 
                     b.Navigation("HomeTeam");
 
+                    b.Navigation("KnockoutFixture");
+
                     b.Navigation("Rules")
                         .IsRequired();
 
@@ -1933,6 +1991,87 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("Player");
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Knockouts.KnockoutFixture", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Tournament", "Tournament")
+                        .WithMany()
+                        .HasForeignKey("TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsOne("TournamentScheduler.Api.Models.Knockouts.KnockoutSlot", "Away", b1 =>
+                        {
+                            b1.Property<int>("KnockoutFixtureId")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("FromOrder")
+                                .HasColumnType("int");
+
+                            b1.Property<string>("GroupName")
+                                .HasMaxLength(20)
+                                .HasColumnType("nvarchar(20)");
+
+                            b1.Property<int>("Kind")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("OverrideTeamId")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("Place")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("TeamId")
+                                .HasColumnType("int");
+
+                            b1.HasKey("KnockoutFixtureId");
+
+                            b1.ToTable("KnockoutFixtures");
+
+                            b1.WithOwner()
+                                .HasForeignKey("KnockoutFixtureId");
+                        });
+
+                    b.OwnsOne("TournamentScheduler.Api.Models.Knockouts.KnockoutSlot", "Home", b1 =>
+                        {
+                            b1.Property<int>("KnockoutFixtureId")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("FromOrder")
+                                .HasColumnType("int");
+
+                            b1.Property<string>("GroupName")
+                                .HasMaxLength(20)
+                                .HasColumnType("nvarchar(20)");
+
+                            b1.Property<int>("Kind")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("OverrideTeamId")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("Place")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("TeamId")
+                                .HasColumnType("int");
+
+                            b1.HasKey("KnockoutFixtureId");
+
+                            b1.ToTable("KnockoutFixtures");
+
+                            b1.WithOwner()
+                                .HasForeignKey("KnockoutFixtureId");
+                        });
+
+                    b.Navigation("Away")
+                        .IsRequired();
+
+                    b.Navigation("Home")
+                        .IsRequired();
+
+                    b.Navigation("Tournament");
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Match", b =>
                 {
                     b.HasOne("TournamentScheduler.Api.Models.Team", "AwayTeam")
@@ -1945,11 +2084,15 @@ namespace TournamentScheduler.Api.Migrations
                         .HasForeignKey("HomeTeamId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("TournamentScheduler.Api.Models.Knockouts.KnockoutFixture", "KnockoutFixture")
+                        .WithMany()
+                        .HasForeignKey("KnockoutFixtureId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("TournamentScheduler.Api.Models.SavedFixture", "SavedFixture")
                         .WithMany()
                         .HasForeignKey("SavedFixtureId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("TournamentScheduler.Api.Models.Tournament", "Tournament")
                         .WithMany("Matches")
@@ -1960,6 +2103,8 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("AwayTeam");
 
                     b.Navigation("HomeTeam");
+
+                    b.Navigation("KnockoutFixture");
 
                     b.Navigation("SavedFixture");
 

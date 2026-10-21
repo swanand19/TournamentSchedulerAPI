@@ -111,6 +111,11 @@ public class TournamentStats
     public string Basis { get; set; } = string.Empty;
 
     public TournamentSummary Summary { get; set; } = new();
+
+    /// <summary>The Final's winner, once it has one (tournaments with a knockout stage).</summary>
+    public int? ChampionTeamId { get; set; }
+    public string? ChampionName { get; set; }
+
     public List<StatBoard> PlayerBoards { get; set; } = new();
     public List<TeamStandingRow> Standings { get; set; } = new();
 

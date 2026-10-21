@@ -66,6 +66,13 @@ public class TeamsController : ApiController
     public async Task<ActionResult<ApiResponse<Team>>> ResetJoinCode(int id, int teamId) =>
         Respond(await _teams.ResetJoinCodeAsync(id, teamId));
 
+    // POST api/tournaments/5/teams/9/players/lookup — who an email or number belongs to, before adding them
+    [HttpPost("{teamId}/players/lookup")]
+    [ServiceRequestId("PLAYER_CONTACT_LOOKUP")]
+    [TournamentAccess(TournamentPermission.Edit)]
+    public async Task<ActionResult<ApiResponse<PlayerLookupDto>>> LookupPlayer(int id, int teamId, [FromBody] PlayerLookupRequest request) =>
+        Respond(await _teams.LookupPlayerAsync(id, teamId, request));
+
     // POST api/tournaments/5/teams/9/players
     [HttpPost("{teamId}/players")]
     [ServiceRequestId("PLAYER_CREATE")]

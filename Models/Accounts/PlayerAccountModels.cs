@@ -74,6 +74,42 @@ public class JoinTeamResult
     public int PlayerId { get; set; }
 }
 
+// --- Adding a player by their email or number ----------------------------------
+
+public class PlayerLookupRequest
+{
+    /// <summary>An email or a mobile number, in one field (anything with an @ is an email).</summary>
+    public string Contact { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Who an email or number belongs to, before an owner adds them to a team. Only the name: never
+/// the account's other contact or its id, so a lookup tells an owner no more than the squad list will.
+/// </summary>
+public class PlayerLookupDto
+{
+    /// <summary>"Email" or "Phone": which field of <c>PLAYER_CREATE</c> to send <see cref="Contact"/> in.</summary>
+    public ContactKind Kind { get; set; }
+
+    /// <summary>As stored: a lower-case email, or the number in E.164 ("+919876543210").</summary>
+    public string Contact { get; set; } = string.Empty;
+
+    /// <summary>For the screen: "+91 98765 43210", or the email.</summary>
+    public string Display { get; set; } = string.Empty;
+
+    /// <summary>An account uses it, so the player can be added without typing a name.</summary>
+    public bool Found { get; set; }
+
+    /// <summary>The account's name, when <see cref="Found"/>.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>The team they already play for in this tournament (they can't be in two).</summary>
+    public string? PlaysFor { get; set; }
+
+    /// <summary>A squad place in this tournament is already waiting on this email or number.</summary>
+    public string? WaitingIn { get; set; }
+}
+
 // --- Deleting an account ------------------------------------------------------
 
 /// <summary>

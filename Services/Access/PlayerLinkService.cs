@@ -36,6 +36,12 @@ public interface IPlayerLinkService
 
     /// <summary>The team the person already plays for in this tournament, if any.</summary>
     Task<string?> TeamAlreadyInAsync(int tournamentId, int userId, int? exceptPlayerId = null);
+
+    /// <summary>The account that signs in with this email or number — one a place would link to.</summary>
+    Task<User?> AccountWithAsync(Contact contact);
+
+    /// <summary>The team whose unlinked place is waiting on this email or number in this tournament, if any.</summary>
+    Task<string?> TeamWaitingOnAsync(int tournamentId, Contact contact);
 }
 
 /// <summary>
@@ -218,6 +224,22 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
         await _players.QueryFirstOrDefaultAsync(q => q
             .Where(p => p.TournamentId == tournamentId && p.UserId == userId && p.Id != exceptPlayerId)
             .Select(p => p.Team!.Name), tracking: false);
+
+    public Task<User?> AccountWithAsync(Contact contact) => contact.IsEmail
+        ? _users.FirstOrDefaultAsync(u => u.EmailId == contact.Value && u.DeletedOn == null && !u.IsDisabled)
+        : _users.FirstOrDefaultAsync(u => u.PhoneNumber == contact.Value && u.DeletedOn == null && !u.IsDisabled);
+
+    public async Task<string?> TeamWaitingOnAsync(int tournamentId, Contact contact)
+    {
+        var value = contact.Value;
+        return contact.IsEmail
+            ? await _players.QueryFirstOrDefaultAsync(q => q
+                .Where(p => p.TournamentId == tournamentId && p.UserId == null && p.EmailId == value)
+                .Select(p => p.Team!.Name), tracking: false)
+            : await _players.QueryFirstOrDefaultAsync(q => q
+                .Where(p => p.TournamentId == tournamentId && p.UserId == null && p.PhoneNumber == value)
+                .Select(p => p.Team!.Name), tracking: false);
+    }
 
     private async Task<Sport> SportOf(int tournamentId) =>
         await _tournaments.QueryFirstOrDefaultAsync(q => q.Where(t => t.Id == tournamentId).Select(t => t.Sport), tracking: false);

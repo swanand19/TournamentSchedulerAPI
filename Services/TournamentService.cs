@@ -6,6 +6,7 @@ using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
 using TournamentScheduler.Api.Services.Access;
+using TournamentScheduler.Api.Services.Knockouts;
 
 namespace TournamentScheduler.Api.Services;
 
@@ -43,6 +44,7 @@ public class TournamentService : ServiceBase, ITournamentService
     private readonly ICurrentUser _currentUser;
     private readonly ITournamentContext _context;
     private readonly TimeProvider _clock;
+    private readonly IKnockoutService _knockouts;
 
     public TournamentService(
         IDataService<Tournament> tournaments,
@@ -55,7 +57,8 @@ public class TournamentService : ServiceBase, ITournamentService
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         ITournamentContext context,
-        TimeProvider clock)
+        TimeProvider clock,
+        IKnockoutService knockouts)
     {
         _tournaments = tournaments;
         _schedules = schedules;
@@ -68,6 +71,7 @@ public class TournamentService : ServiceBase, ITournamentService
         _currentUser = currentUser;
         _context = context;
         _clock = clock;
+        _knockouts = knockouts;
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
@@ -346,8 +350,19 @@ public class TournamentService : ServiceBase, ITournamentService
         var activeSchedule = await _schedules.FirstOrDefaultAsync(
             s => s.TournamentId == id && s.IsActive, ScheduleQueries.WithFixtures);
 
-        if (activeSchedule == null)
-            return BadRequest("No active schedule found for this tournament.");
+        // A knockout-only tournament has no schedule: its knockout stage is the whole of it.
+        var hasKnockouts = await _knockouts.AnyAsync(id);
+        if (activeSchedule == null && !hasKnockouts)
+            return BadRequest("No active schedule found for this tournament. Approve a schedule, or set up a knockout stage.");
+
+        if (hasKnockouts)
+        {
+            var groups = activeSchedule?.Groups
+                .Select(g => new KnockoutGroup(g.GroupName, g.Fixtures.SelectMany(f => new[] { f.Home, f.Away }).Distinct().Count()))
+                .ToList() ?? [];
+            if (await _knockouts.ProblemAtStartAsync(id, groups) is { } knockoutProblem)
+                return BadRequest(knockoutProblem);
+        }
 
         var teams = await _teams.ListAsync(t => t.TournamentId == id);
 
@@ -355,7 +370,7 @@ public class TournamentService : ServiceBase, ITournamentService
         int? ResolveTeam(int? savedId, string name) =>
             savedId ?? teams.FirstOrDefault(t => t.Name == name)?.Id;
 
-        var fixtures = activeSchedule.Groups
+        var fixtures = (activeSchedule?.Groups ?? [])
             .SelectMany(group => group.Fixtures.Select(fixture => (group, fixture)))
             .ToList();
 
@@ -402,6 +417,9 @@ public class TournamentService : ServiceBase, ITournamentService
         tournament.Status = TournamentStatus.Live;
         await _unitOfWork.SaveChangesAsync();
 
+        // After the group matches exist, so the knockout matches are numbered after them.
+        if (hasKnockouts) created += await _knockouts.CreateMatchesAsync(id);
+
         return Ok(new { matchesCreated = created });
     }
 
@@ -419,7 +437,7 @@ public class TournamentService : ServiceBase, ITournamentService
         {
             var loaded = await _cricketMatches.ListAsync(
                 m => m.TournamentId == id,
-                q => CricketMatchQueries.WithInnings(q).OrderBy(m => m.GroupName).ThenBy(m => m.MatchNumber));
+                q => CricketMatchQueries.WithInnings(q).OrderBy(m => m.KnockoutFixtureId != null).ThenBy(m => m.GroupName).ThenBy(m => m.MatchNumber));
 
             // "148/6 (20.0)", or "300 & 150/4" once a side has batted twice. Null until they have
             // batted at all, which is what makes the card fall back to "VS".
@@ -440,6 +458,8 @@ public class TournamentService : ServiceBase, ITournamentService
             {
                 m.Id,
                 m.GroupName,
+                Stage = m.KnockoutFixtureId != null ? "Knockout" : "Group",
+                m.RoundLabel,
                 m.MatchNumber,
                 m.HomeTeamName,
                 m.AwayTeamName,
@@ -461,11 +481,13 @@ public class TournamentService : ServiceBase, ITournamentService
 
         var matches = await _matches.QueryAsync(q => q
             .Where(m => m.TournamentId == id)
-            .OrderBy(m => m.GroupName).ThenBy(m => m.MatchNumber)
+            .OrderBy(m => m.KnockoutFixtureId != null).ThenBy(m => m.GroupName).ThenBy(m => m.MatchNumber)
             .Select(m => new
             {
                 m.Id,
                 m.GroupName,
+                Stage = m.KnockoutFixtureId != null ? "Knockout" : "Group",
+                m.RoundLabel,
                 m.MatchNumber,
                 m.HomeTeamName,
                 m.AwayTeamName,

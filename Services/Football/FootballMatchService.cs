@@ -47,6 +47,12 @@ public class FootballMatchService : ServiceBase, IFootballMatchService
 
         if (match.Status != MatchStatus.NotStarted)
             return BadRequest("This match has already been set up or started.");
+        if (match.HomeTeamId is null || match.AwayTeamId is null)
+            return BadRequest($"{match.RoundLabel ?? "This match"} is waiting for its teams: {match.HomeTeamName} v {match.AwayTeamName}. It fills in when those results are in.");
+
+        // A knockout match must have a winner: no draws, so level scores go to extra time (if chosen) and penalties.
+        if (match.IsKnockout) request.DrawAllowed = false;
+
         // Several matches may be played at once (more than one pitch), but a team can only be on one of them.
         var teams = new[] { match.HomeTeamId, match.AwayTeamId }.Where(t => t != null).ToList();
         var busy = teams.Count == 0 ? null : await _matches.QueryFirstOrDefaultAsync(q => q

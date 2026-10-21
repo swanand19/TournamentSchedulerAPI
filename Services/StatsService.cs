@@ -13,6 +13,9 @@ public interface IStatsService
     /// the same tallies the leaderboards rank, for career pages to add up.
     /// </summary>
     Task<Dictionary<int, FootballPlayerFigures>> PlayerFiguresAsync(int tournamentId);
+
+    /// <summary>The team that won the tournament's Final, once it has been played; null otherwise.</summary>
+    Task<int?> ChampionAsync(int tournamentId);
 }
 
 /// <summary>One player's figures from a set of completed matches.</summary>
@@ -78,7 +81,7 @@ public class StatsService : IStatsService
         // from another competition.
         var teams = await _teams.ListAsync(t => t.TournamentId == tournamentId, TeamQueries.WithPlayers, tracking: false);
 
-        var allMatches = await _matches.ListAsync(m => m.TournamentId == tournamentId, tracking: false);
+        var allMatches = await _matches.ListAsync(m => m.TournamentId == tournamentId, MatchQueries.WithKnockoutFixture, tracking: false);
 
         var counted = allMatches.Where(m => m.Status == MatchStatus.Completed).ToList();
         var countedIds = counted.Select(m => m.Id).ToHashSet();
@@ -110,11 +113,27 @@ public class StatsService : IStatsService
         var tallies = BuildPlayerTallies(counted, squads, events, kicks);
 
         stats.Summary = BuildSummary(allMatches, counted, events, kicks, tallies);
-        stats.Standings = BuildStandings(counted, events, teams);
+        // A knockout-only tournament has no table.
+        var knockoutOnly = allMatches.Count > 0 && allMatches.All(m => m.IsKnockout);
+        stats.Standings = knockoutOnly ? [] : BuildStandings(counted, events, teams);
+        if (allMatches.FirstOrDefault(m => m.IsKnockout && m.KnockoutFixture?.Round == Models.Knockouts.KnockoutRound.Final)
+                is { } final && Knockouts.KnockoutResults.WinnerOf(final) is int champion)
+        {
+            stats.ChampionTeamId = champion;
+            stats.ChampionName = champion == final.HomeTeamId ? final.HomeTeamName : final.AwayTeamName;
+        }
         stats.PlayerBoards = BuildBoards(tallies, playerLookup, teamNames);
         stats.Notes = BuildNotes(counted);
 
         return stats;
+    }
+
+    public async Task<int?> ChampionAsync(int tournamentId)
+    {
+        var final = await _matches.FirstOrDefaultAsync(
+            m => m.TournamentId == tournamentId && m.KnockoutFixtureId != null && m.KnockoutFixture!.Round == Models.Knockouts.KnockoutRound.Final,
+            tracking: false);
+        return final == null ? null : Knockouts.KnockoutResults.WinnerOf(final);
     }
 
     public async Task<Dictionary<int, FootballPlayerFigures>> PlayerFiguresAsync(int tournamentId)
@@ -405,8 +424,27 @@ public class StatsService : IStatsService
     // Standings
     // -----------------------------------------------------------------
 
+    /// <summary>
+    /// A finished group's teams in finishing order — the table's own order (points, goal difference,
+    /// goals, name), so a knockout slot like "Group A, 2nd" always agrees with the table.
+    /// </summary>
+    public static List<int> RankGroup(List<Match> groupMatches)
+    {
+        var teams = groupMatches
+            .SelectMany(m => new[] { (Id: m.HomeTeamId, Name: m.HomeTeamName), (Id: m.AwayTeamId, Name: m.AwayTeamName) })
+            .Where(t => t.Id.HasValue)
+            .DistinctBy(t => t.Id)
+            .Select(t => new Team { Id = t.Id!.Value, Name = t.Name })
+            .ToList();
+        var counted = groupMatches.Where(m => m.Status == MatchStatus.Completed).ToList();
+        return BuildStandings(counted, [], teams).Select(r => r.TeamId).ToList();
+    }
+
     private static List<TeamStandingRow> BuildStandings(List<Match> matches, List<MatchEvent> events, List<Team> teams)
     {
+        // The table is the group stage's: knockout matches have no points.
+        matches = matches.Where(m => !m.IsKnockout).ToList();
+
         var rows = teams.ToDictionary(t => t.Id, t => new TeamStandingRow
         {
             TeamId = t.Id,

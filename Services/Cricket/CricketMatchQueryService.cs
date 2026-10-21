@@ -69,6 +69,9 @@ public class CricketMatchQueryService : ServiceBase, ICricketMatchQueryService
             match.AwayTeamId,
             match.HomeTeamName,
             match.AwayTeamName,
+            // A knockout match must send a side through: no "allow a tie", no draw (the server enforces it).
+            match.IsKnockout,
+            match.RoundLabel,
             Presets = CricketRulePresets.All.Keys.Select(name => new
             {
                 Name = name,

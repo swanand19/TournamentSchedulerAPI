@@ -20,6 +20,9 @@ public class WatchMatchDto
     public int TournamentId { get; set; }
     public string TournamentName { get; set; } = string.Empty;
     public string GroupName { get; set; } = string.Empty;
+
+    /// <summary>"Semi-final 1" for a knockout match (shown instead of the group); null in a group.</summary>
+    public string? RoundLabel { get; set; }
     public int MatchNumber { get; set; }
     public WatchPhase Phase { get; set; }
 

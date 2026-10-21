@@ -5,7 +5,9 @@ using TournamentScheduler.Api.Data.Queries;
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
+using Microsoft.Extensions.Options;
 using TournamentScheduler.Api.Services.Access;
+using TournamentScheduler.Api.Services.Accounts;
 
 namespace TournamentScheduler.Api.Services;
 
@@ -17,6 +19,7 @@ public interface ITeamService
     Task<ServiceResult<Team>> UpdateTeamAsync(int tournamentId, int id, UpdateTeamRequest request);
     Task<ServiceResult<bool>> DeleteTeamAsync(int tournamentId, int id);
     Task<ServiceResult<Team>> ResetJoinCodeAsync(int tournamentId, int id);
+    Task<ServiceResult<PlayerLookupDto>> LookupPlayerAsync(int tournamentId, int teamId, PlayerLookupRequest request);
     Task<ServiceResult<Player>> AddPlayerAsync(int tournamentId, int teamId, CreatePlayerRequest request);
     Task<ServiceResult<Player>> UpdatePlayerAsync(int tournamentId, int teamId, int playerId, UpdatePlayerRequest request);
     Task<ServiceResult<Player>> UnlinkPlayerAsync(int tournamentId, int teamId, int playerId);
@@ -37,6 +40,8 @@ public class TeamService : ServiceBase, ITeamService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITournamentContext _context;
     private readonly ICurrentUser _currentUser;
+    private readonly PlayerLookups _lookups;
+    private readonly SmsOptions _sms;
 
     public TeamService(
         IDataService<Tournament> tournaments,
@@ -45,7 +50,9 @@ public class TeamService : ServiceBase, ITeamService
         IPlayerLinkService links,
         IUnitOfWork unitOfWork,
         ITournamentContext context,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        PlayerLookups lookups,
+        IOptions<SmsOptions> sms)
     {
         _tournaments = tournaments;
         _teams = teams;
@@ -54,6 +61,8 @@ public class TeamService : ServiceBase, ITeamService
         _unitOfWork = unitOfWork;
         _context = context;
         _currentUser = currentUser;
+        _lookups = lookups;
+        _sms = sms.Value;
     }
 
     private Task<bool> TournamentExists(int tournamentId) => _tournaments.AnyAsync(t => t.Id == tournamentId);
@@ -161,18 +170,62 @@ public class TeamService : ServiceBase, ITeamService
         return Success(team);
     }
 
+    /// <summary>
+    /// Who an email or number belongs to, so an owner adding a player can pick the person instead
+    /// of typing their name. Limited per owner (<see cref="PlayerLookups"/>): a lookup reveals
+    /// whether an account exists, and that's all it reveals.
+    /// </summary>
+    public async Task<ServiceResult<PlayerLookupDto>> LookupPlayerAsync(int tournamentId, int teamId, PlayerLookupRequest request)
+    {
+        var team = await FindTeam(tournamentId, teamId);
+        if (team == null) return NotFound("Team not found.");
+
+        var (contact, problem) = Contacts.Read(request.Contact, _sms.IsEnabled);
+        if (contact is not { } found) return BadRequest(problem!);
+
+        if (_lookups.TryLookup(_currentUser.UserId) is { } wait)
+            return TooManyRequests($"That's a lot of lookups. Try again in {Math.Max(1, (int)Math.Ceiling(wait.TotalMinutes))} minutes, or add the player by name.");
+
+        var user = await _links.AccountWithAsync(found);
+        return Success(new PlayerLookupDto
+        {
+            Kind = found.Kind,
+            Contact = found.Value,
+            Display = Contacts.Display(found.Value),
+            Found = user != null,
+            Name = user?.Name,
+            PlaysFor = user == null ? null : await _links.TeamAlreadyInAsync(tournamentId, user.UserId),
+            WaitingIn = user == null ? await _links.TeamWaitingOnAsync(tournamentId, found) : null
+        });
+    }
+
+    /// <summary>Why a player added without a name can't be: null when their email or number has an account.</summary>
+    private async Task<string?> NameNeededAsync(CreatePlayerRequest request)
+    {
+        foreach (var typed in new[] { request.Email, request.Phone })
+        {
+            if (string.IsNullOrWhiteSpace(typed)) continue;
+            if (Contacts.Parse(typed).Contact is { } contact && await _links.AccountWithAsync(contact) != null)
+                return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Email))
+            return "No account uses that email yet, so add the player's name. They'll be linked when they sign up.";
+        if (!string.IsNullOrWhiteSpace(request.Phone))
+            return "No account uses that number yet, so add the player's name. They'll be linked when they sign up.";
+        return "Player name is required.";
+    }
+
     public async Task<ServiceResult<Player>> AddPlayerAsync(int tournamentId, int teamId, CreatePlayerRequest request)
     {
         var team = await FindTeam(tournamentId, teamId);
         if (team == null) return NotFound("Team not found.");
 
+        // Someone with an account is shown by their account's name, so they can be added by their
+        // email or number alone; anyone else needs a name to show until they sign up.
         var name = request.Name?.Trim() ?? "";
-        if (string.IsNullOrWhiteSpace(name))
-            return BadRequest("Player name is required.");
-
-        if (request.JerseyNumber.HasValue
-            && await _players.AnyAsync(p => p.TeamId == teamId && p.JerseyNumber == request.JerseyNumber))
-            return Conflict($"Jersey number {request.JerseyNumber} is already taken on this team.");
+        if (string.IsNullOrWhiteSpace(name) && await NameNeededAsync(request) is { } nameError)
+            return BadRequest(nameError);
 
         if (CricketProfiles.Problem(request.Cricket) is { } cricketError)
             return BadRequest(cricketError);
@@ -210,10 +263,6 @@ public class TeamService : ServiceBase, ITeamService
         var name = request.Name?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(name))
             return BadRequest("Player name is required.");
-
-        if (request.JerseyNumber.HasValue
-            && await _players.AnyAsync(p => p.TeamId == teamId && p.JerseyNumber == request.JerseyNumber && p.Id != playerId))
-            return Conflict($"Jersey number {request.JerseyNumber} is already taken on this team.");
 
         if (CricketProfiles.Problem(request.Cricket) is { } cricketError)
             return BadRequest(cricketError);
@@ -292,7 +341,7 @@ public class TeamService : ServiceBase, ITeamService
         }
         catch (DuplicateEntryException)
         {
-            // The one-place-per-tournament or jersey-number index, beaten by another request.
+            // The one-place-per-tournament index, beaten by another request.
             return Conflict("Someone else changed this squad at the same moment. Reload the teams and try again.");
         }
     }

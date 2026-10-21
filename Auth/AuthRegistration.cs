@@ -56,6 +56,7 @@ public static class AuthRegistration
         services.AddScoped<IPlayerLinkService, PlayerLinkService>();
         services.AddScoped<ITeamJoinService, TeamJoinService>();
         services.AddSingleton<JoinCodeAttempts>();
+        services.AddSingleton<PlayerLookups>();
 
         // The admin portal: its sign-in (code + password), permissions and roles, people, every tournament.
         services.AddScoped<PortalAccess>();
