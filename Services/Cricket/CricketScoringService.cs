@@ -26,6 +26,7 @@ public partial class CricketScoringService : ICricketScoringService
     private readonly IDataService<CricketMatchPlayer> _squads;
     private readonly IDataService<CricketBall> _balls;
     private readonly IDataService<Player> _players;
+    private readonly IDataService<CricketMatchEvent> _events;
     private readonly IUnitOfWork _unitOfWork;
 
     public CricketScoringService(
@@ -33,12 +34,14 @@ public partial class CricketScoringService : ICricketScoringService
         IDataService<CricketMatchPlayer> squads,
         IDataService<CricketBall> balls,
         IDataService<Player> players,
+        IDataService<CricketMatchEvent> events,
         IUnitOfWork unitOfWork)
     {
         _matches = matches;
         _squads = squads;
         _balls = balls;
         _players = players;
+        _events = events;
         _unitOfWork = unitOfWork;
     }
 
@@ -88,6 +91,19 @@ public partial class CricketScoringService : ICricketScoringService
 
         if (match.HomeTeamId is null || match.AwayTeamId is null)
             return CricketResult<CricketMatch>.Fail("Both teams must be known before the match can be set up.");
+
+        // Several matches may be played at once, but a team can only be on one of them. A match set up
+        // (toss done) but not yet bowled at counts: both teams are at that ground.
+        int?[] teams = [match.HomeTeamId, match.AwayTeamId];
+        var busy = await _matches.QueryFirstOrDefaultAsync(q => q
+            .Where(m => m.TournamentId == match.TournamentId && m.Id != matchId
+                && (m.Status == CricketMatchStatus.InProgress || m.Status == CricketMatchStatus.InningsBreak || m.Status == CricketMatchStatus.SuperOver
+                    || (m.Status == CricketMatchStatus.NotStarted && m.TossWinnerTeamId != null))
+                && (teams.Contains(m.HomeTeamId) || teams.Contains(m.AwayTeamId)))
+            .Select(m => new { m.HomeTeamId, m.HomeTeamName, m.AwayTeamName }), tracking: false);
+        if (busy != null)
+            return CricketResult<CricketMatch>.Fail(
+                $"{(teams.Contains(busy.HomeTeamId) ? busy.HomeTeamName : busy.AwayTeamName)} is playing {busy.HomeTeamName} v {busy.AwayTeamName} right now. Finish that match before starting this one.");
 
         var rules = request.Rules ?? CricketRulePresets.Create(request.Preset) ?? new CricketMatchRules();
         if (ValidateRules(rules) is { } ruleError)
@@ -730,6 +746,6 @@ public partial class CricketScoringService : ICricketScoringService
         return legal / innings.BallsPerOver;
     }
 
-    private static string NameOf(CricketMatch match, int playerId) =>
+    internal static string NameOf(CricketMatch match, int playerId) =>
         match.Squad.FirstOrDefault(p => p.PlayerId == playerId)?.PlayerName ?? $"Player {playerId}";
 }

@@ -19,7 +19,10 @@ public enum CricketMatchEventType
     MatchCompleted = 8,
     MatchAbandoned = 9,
     BallUndone = 10,
-    OversReduced = 11
+    OversReduced = 11,
+
+    /// <summary>A batter or bowler picked by mistake was corrected (<c>CRICKET_PLAYER_REPLACE</c>).</summary>
+    PlayerReplaced = 12
 }
 
 public class CricketMatchEvent

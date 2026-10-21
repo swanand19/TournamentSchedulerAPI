@@ -2,8 +2,10 @@ using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using TournamentScheduler.Api.Models;
+using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
 using TournamentScheduler.Api.Services.Access;
+using TournamentScheduler.Api.Services.Notifications;
 
 namespace TournamentScheduler.Api.Auth.TournamentAccess;
 
@@ -11,12 +13,13 @@ namespace TournamentScheduler.Api.Auth.TournamentAccess;
 /// Runs every action's <see cref="TournamentAccessAttribute"/>: finds the tournament from the route
 /// or body, asks <see cref="ITournamentAccessService"/> whether the caller may, and refuses in the
 /// usual envelope if not. After a successful action it lets the service keep the scorer lock
-/// current, and adds the <c>scoring</c> block to any match it answers with.
+/// current, tells the owners when a scoring action finished the last match (phase 6D), and adds
+/// the <c>scoring</c> block to any match it answers with.
 ///
 /// An action filter (not middleware) because it needs the bound body — the schedule approval names
 /// its tournament there.
 /// </summary>
-public sealed class TournamentAccessFilter(ITournamentAccessService access, ICurrentUser currentUser) : IAsyncActionFilter
+public sealed class TournamentAccessFilter(ITournamentAccessService access, INotifier notifier, ICurrentUser currentUser) : IAsyncActionFilter
 {
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
@@ -49,6 +52,7 @@ public sealed class TournamentAccessFilter(ITournamentAccessService access, ICur
         if (StatusOf(executed.Result) >= 400) return;
 
         await access.AfterSuccessAsync(rule.Permission);
+        if (rule.Permission == TournamentPermission.Score) await notifier.AfterScoringAsync();
 
         switch ((executed.Result as ObjectResult)?.Value)
         {

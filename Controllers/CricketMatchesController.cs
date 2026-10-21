@@ -97,6 +97,13 @@ public class CricketMatchesController : ApiController
     public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> SetBowler(int matchId, [FromBody] NewBowlerRequest request) =>
         Respond(await _cricket.SetBowlerAsync(matchId, request));
 
+    // POST api/cricket-matches/5/replace — a batter at the crease or this over's bowler was picked by mistake
+    [HttpPost("{matchId}/replace")]
+    [ServiceRequestId("CRICKET_PLAYER_REPLACE")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.CricketMatch)]
+    public async Task<ActionResult<ApiResponse<CricketMatchStateDto>>> ReplacePlayer(int matchId, [FromBody] ReplacePlayerRequest request) =>
+        Respond(await _cricket.ReplacePlayerAsync(matchId, request));
+
     // POST api/cricket-matches/5/innings/end — a declaration or an abandonment
     [HttpPost("{matchId}/innings/end")]
     [ServiceRequestId("CRICKET_INNINGS_END")]

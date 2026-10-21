@@ -45,6 +45,7 @@ public class AccountService : ServiceBase, IAccountService
     private readonly ISessionService _sessionService;
     private readonly IOtpCodeService _codes;
     private readonly IPlayerLinkService _links;
+    private readonly ITournamentInviteService _invites;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly SmsOptions _sms;
@@ -59,6 +60,7 @@ public class AccountService : ServiceBase, IAccountService
         ISessionService sessionService,
         IOtpCodeService codes,
         IPlayerLinkService links,
+        ITournamentInviteService invites,
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         IOptions<SmsOptions> sms,
@@ -72,6 +74,7 @@ public class AccountService : ServiceBase, IAccountService
         _sessionService = sessionService;
         _codes = codes;
         _links = links;
+        _invites = invites;
         _unitOfWork = unitOfWork;
         _currentUser = currentUser;
         _sms = sms.Value;
@@ -83,8 +86,6 @@ public class AccountService : ServiceBase, IAccountService
 
     public const int NameMinLength = 2;
     public const int NameMaxLength = 100;
-
-    public const string PhoneOff = "Mobile numbers can't be used yet. Use your email address.";
 
     public AuthOptionsDto GetOptions() => new() { Phone = _sms.IsEnabled, DefaultCountryCode = Contacts.DefaultCountryCode };
 
@@ -158,7 +159,7 @@ public class AccountService : ServiceBase, IAccountService
         var (token, session) = _sessionService.Start(user.UserId, client);
         await _unitOfWork.SaveChangesAsync();
 
-        await LinkWaitingPlaces(user);
+        await TakeUpWhatWasWaiting(user);
 
         return Success(new VerifyOtpResponse
         {
@@ -172,12 +173,22 @@ public class AccountService : ServiceBase, IAccountService
     }
 
     /// <summary>
-    /// Squad places an organiser gave this email or number before the account had it. Done after
-    /// the change is saved: a clash here (another request linking the same tournament first) must
-    /// never stop someone signing in.
+    /// What was waiting for this email or number before the account had it: owner and scorer
+    /// invites (phase 6C), then squad places an organiser gave it. Done after the change is saved:
+    /// a clash here (another request adding the same person first) must never stop someone signing in.
     /// </summary>
-    private async Task LinkWaitingPlaces(User user)
+    private async Task TakeUpWhatWasWaiting(User user)
     {
+        try
+        {
+            if (await _invites.AcceptWaitingAsync(user) > 0)
+                await _unitOfWork.SaveChangesAsync();
+        }
+        catch (DuplicateEntryException e)
+        {
+            _logger.LogWarning(e, "Couldn't accept waiting invites for user {UserId}; they'll be accepted at the next sign-in.", user.UserId);
+        }
+
         try
         {
             if (await _links.LinkWaitingPlacesAsync(user) > 0)
@@ -306,7 +317,7 @@ public class AccountService : ServiceBase, IAccountService
             return Conflict($"This {Noun(to)} was added to another account a moment ago.");
         }
 
-        await LinkWaitingPlaces(user);
+        await TakeUpWhatWasWaiting(user);
         return Success(await ToDto(user));
     }
 
@@ -351,9 +362,7 @@ public class AccountService : ServiceBase, IAccountService
             return email == null ? (null, "Enter a valid email address.") : (new Contact(ContactKind.Email, email), null);
         }
 
-        var (to, problem) = Contacts.Parse(contact);
-        if (to is { IsEmail: false } && !_sms.IsEnabled) return (null, PhoneOff);
-        return (to, problem);
+        return Contacts.Read(contact, _sms.IsEnabled);
     }
 
     private Task<User?> FindByAsync(Contact to) =>

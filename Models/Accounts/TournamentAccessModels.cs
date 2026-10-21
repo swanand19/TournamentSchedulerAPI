@@ -92,6 +92,9 @@ public class TournamentMemberDto
     /// <summary>Shown to owners only (they add people by email); null for everyone else.</summary>
     public string? Email { get; set; }
 
+    /// <summary>Owners only, like <see cref="Email"/>.</summary>
+    public string? Phone { get; set; }
+
     public string Role { get; set; } = string.Empty;
     public bool IsCreator { get; set; }
     public bool IsMe { get; set; }
@@ -100,8 +103,66 @@ public class TournamentMemberDto
 
 public class AddTournamentMemberRequest
 {
-    public string Email { get; set; } = string.Empty;
+    /// <summary>An email or a mobile number (phase 6C); the server works out which.</summary>
+    public string? Contact { get; set; }
+
+    /// <summary>The field before phase 6C: an email only. Used when <see cref="Contact"/> is empty.</summary>
+    public string? Email { get; set; }
+
     public TournamentMemberRole Role { get; set; } = TournamentMemberRole.Scorer;
+}
+
+/// <summary>
+/// An owner or scorer asked for by an email or number with no account yet (phase 6C). Sent to
+/// them; when they sign up (or add it to their account) they get the role. Cancelled =
+/// <see cref="AuditedEntity.IsDisabled"/>; <c>CrdBy</c> is who invited them.
+/// </summary>
+public class TournamentInvite : AuditedEntity
+{
+    public int TournamentInviteId { get; set; }
+    public int TournamentId { get; set; }
+    public OtpChannel Channel { get; set; }
+
+    /// <summary>The lower-case email or the E.164 number, as accounts store them.</summary>
+    public string Target { get; set; } = string.Empty;
+
+    public TournamentMemberRole MemberRole { get; set; }
+    public DateTime LastSentAt { get; set; }
+
+    /// <summary>Sending it again moves this on; until then a sign-up with it still takes the role.</summary>
+    public DateTime ExpiresAt { get; set; }
+
+    public DateTime? AcceptedAt { get; set; }
+    public int? AcceptedByUserId { get; set; }
+}
+
+/// <summary>Everyone on People & settings: the members, and (for owners) who is still invited.</summary>
+public class TournamentPeopleDto
+{
+    public List<TournamentMemberDto> Members { get; set; } = [];
+
+    /// <summary>Owners only; empty for everyone else.</summary>
+    public List<TournamentInviteDto> Invites { get; set; } = [];
+
+    /// <summary>After an add, resend or cancel: what happened, in a sentence to show.</summary>
+    public string? Notice { get; set; }
+}
+
+public class TournamentInviteDto
+{
+    public int InviteId { get; set; }
+
+    /// <summary>The email or E.164 number it went to.</summary>
+    public string Contact { get; set; } = string.Empty;
+
+    public OtpChannel Channel { get; set; }
+    public string Role { get; set; } = string.Empty;
+    public string InvitedBy { get; set; } = string.Empty;
+    public DateTime SentAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
+
+    /// <summary>Past its date: it no longer gives the role. Resend renews it.</summary>
+    public bool IsExpired { get; set; }
 }
 
 // --- The scorer lock -----------------------------------------------------

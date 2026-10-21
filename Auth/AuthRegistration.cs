@@ -3,10 +3,12 @@ using Microsoft.Extensions.Options;
 using TournamentScheduler.Api.Auth.Otp;
 using TournamentScheduler.Api.Auth.Permissions;
 using TournamentScheduler.Api.Logging;
+using TournamentScheduler.Api.Messaging;
 using TournamentScheduler.Api.Services;
 using TournamentScheduler.Api.Services.Access;
 using TournamentScheduler.Api.Services.Accounts;
 using TournamentScheduler.Api.Services.Admin;
+using TournamentScheduler.Api.Services.Notifications;
 
 namespace TournamentScheduler.Api.Auth;
 
@@ -41,6 +43,14 @@ public static class AuthRegistration
         services.AddScoped<ITournamentAccessService>(sp => sp.GetRequiredService<TournamentAccessService>());
         services.AddScoped<IScoringLockService, ScoringLockService>();
         services.AddScoped<ITournamentMemberService, TournamentMemberService>();
+        services.AddScoped<ITournamentInviteService, TournamentInviteService>();
+
+        // The inbox (phase 6D).
+        services.AddScoped<INotifier, Notifier>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddHostedService<NotificationEmailJob>();
+        services.AddSingleton<NotificationTemplateStore>();
+        services.AddScoped<IAdminTemplateService, AdminTemplateService>();
 
         // Players are people: squad places linked to accounts, by email or a team join code.
         services.AddScoped<IPlayerLinkService, PlayerLinkService>();
@@ -56,8 +66,10 @@ public static class AuthRegistration
         services.AddScoped<ITournamentLifecycleService, TournamentLifecycleService>();
         services.AddHostedService<TournamentLifecycleJob>();
 
-        // Codes go out by email or text message; the dispatcher picks the sender per message.
+        // Codes and other messages (invites) go out by email or text; the dispatchers pick the sender per message.
         services.AddSingleton<RemoteCallRecorder>();
+        services.AddSingleton<SmtpMailer>();
+        services.AddSingleton<IMessageSender, MessageDispatcher>();
         services.AddSingleton<SmtpOtpSender>();
         services.AddSingleton<LogOtpSender>();
         services.AddSingleton<IOtpSender, OtpDispatcher>();

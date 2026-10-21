@@ -143,7 +143,7 @@ public partial class CricketScoringService
     }
 
     /// <summary>"c Sharma b Bumrah", "lbw b Ashwin", "run out (Jadeja)" — cricket's own shorthand.</summary>
-    private static string DescribeDismissal(CricketMatch match, CricketBall? ball)
+    internal static string DescribeDismissal(CricketMatch match, CricketBall? ball)
     {
         if (ball?.WicketType is not { } wicket) return "not out";
 

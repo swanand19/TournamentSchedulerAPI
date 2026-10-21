@@ -42,6 +42,9 @@ public static class CricketMatchQueries
 {
     public static IQueryable<CricketMatch> WithInnings(IQueryable<CricketMatch> q) => q.Include(m => m.Innings);
 
+    /// <summary>The match and its chosen players, without the deliveries: the watcher's line-ups.</summary>
+    public static IQueryable<CricketMatch> WithSquad(IQueryable<CricketMatch> q) => q.Include(m => m.Squad);
+
     /// <summary>The whole match: squad, every innings with its deliveries and rain interruptions.</summary>
     public static IQueryable<CricketMatch> Full(IQueryable<CricketMatch> q) => q
         .Include(m => m.Squad)

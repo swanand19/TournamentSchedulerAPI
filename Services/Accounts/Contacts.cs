@@ -24,6 +24,18 @@ public static class Contacts
 
     public const string BadPhone = "Enter a valid mobile number, like 98765 43210, or one with its country code, like +44 7700 900123.";
 
+    public const string PhoneOff = "Mobile numbers can't be used yet. Use an email address.";
+
+    /// <summary>
+    /// <see cref="Parse"/>, refusing a mobile number while the server can't text (<c>Sms:Provider</c>
+    /// is None) — anything sent to it could never arrive.
+    /// </summary>
+    public static (Contact? Contact, string? Problem) Read(string? value, bool phoneOn)
+    {
+        var (contact, problem) = Parse(value);
+        return contact is { IsEmail: false } && !phoneOn ? (null, PhoneOff) : (contact, problem);
+    }
+
     /// <summary>The contact, or the sentence saying what's wrong with it.</summary>
     public static (Contact? Contact, string? Problem) Parse(string? value)
     {
@@ -39,6 +51,10 @@ public static class Contacts
         var phone = NormalisePhone(text);
         return phone == null ? (null, BadPhone) : (new Contact(ContactKind.Phone, phone), null);
     }
+
+    /// <summary>A stored email or number for a sentence: "+91 98765 43210"; emails and other countries as stored.</summary>
+    public static string Display(string target) =>
+        target.Length == 13 && target.StartsWith("+91") ? $"+91 {target[3..8]} {target[8..]}" : target;
 
     /// <summary>E.164 ("+919876543210"), or null when it isn't a plausible mobile number.</summary>
     public static string? NormalisePhone(string? value)

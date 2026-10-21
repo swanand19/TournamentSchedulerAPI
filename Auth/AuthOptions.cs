@@ -44,6 +44,9 @@ public sealed class AuthOptions
     /// <summary>Codes one mobile number may be texted an hour (also one a minute). Fewer than email: each text costs money.</summary>
     public int OtpPerPhonePerHour { get; set; } = 3;
 
+    /// <summary>An invite to someone without an account (phase 6C) waits this long for them to sign up.</summary>
+    public int InviteDays { get; set; } = 30;
+
     /// <summary>Across all emails, from one device or one network address.</summary>
     public int OtpPerDevicePerHour { get; set; } = 10;
     public int OtpPerIpPerHour { get; set; } = 30;

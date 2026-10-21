@@ -5,6 +5,7 @@ using TournamentScheduler.Api.Auth.TournamentAccess;
 using TournamentScheduler.Api.Gateway;
 using TournamentScheduler.Api.Http;
 using TournamentScheduler.Api.Models.Accounts;
+using TournamentScheduler.Api.Models.Messaging;
 using TournamentScheduler.Api.Services.Admin;
 
 namespace TournamentScheduler.Api.Controllers;
@@ -12,7 +13,7 @@ namespace TournamentScheduler.Api.Controllers;
 // The admin portal's services (phase 5). Everything but its own sign-in and "who am I" is
 // [AdminOnly]: never EndUser's, and only from a portal session (code + password). The permission
 // and role screens are also [ProtectedService], so Admin can never be locked out of them.
-// Route parameters: {permissionId}, {roleId}, {userId}, and a tournament's {id}.
+// Route parameters: {permissionId}, {roleId}, {userId}, a tournament's {id}, and a template's {code}.
 
 /// <summary>Signing in to the portal, and who is signed in.</summary>
 [ApiController]
@@ -180,4 +181,38 @@ public class AdminTournamentsController : ApiController
     [ServiceRequestId("ADMIN_TOURNAMENT_REOPEN")]
     public async Task<ActionResult<ApiResponse<AdminTournamentDto>>> Reopen(int id, [FromBody] ReopenTournamentRequest request) =>
         Respond(await _tournaments.ReopenAsync(id, request));
+}
+
+/// <summary>The wording of every message the system sends — codes, invites, notifications (phase 6D).</summary>
+[ApiController]
+[Route("api/admin/templates")]
+[DefaultRoles(RoleIds.Admin)]
+[AdminOnly]
+[NotTournamentScoped]
+public class AdminTemplatesController : ApiController
+{
+    private readonly IAdminTemplateService _templates;
+
+    public AdminTemplatesController(IAdminTemplateService templates)
+    {
+        _templates = templates;
+    }
+
+    // GET api/admin/templates
+    [HttpGet]
+    [ServiceRequestId("ADMIN_TEMPLATE_LIST")]
+    public async Task<ActionResult<ApiResponse<List<AdminTemplateDto>>>> List() =>
+        Respond(await _templates.ListAsync());
+
+    // PUT api/admin/templates/SignInCode — the whole template
+    [HttpPut("{code}")]
+    [ServiceRequestId("ADMIN_TEMPLATE_SAVE")]
+    public async Task<ActionResult<ApiResponse<AdminTemplateDto>>> Save(NotificationTemplateCode code, [FromBody] SaveTemplateRequest request) =>
+        Respond(await _templates.SaveAsync(code, request));
+
+    // POST api/admin/templates/SignInCode/reset — back to the built-in wording
+    [HttpPost("{code}/reset")]
+    [ServiceRequestId("ADMIN_TEMPLATE_RESET")]
+    public async Task<ActionResult<ApiResponse<AdminTemplateDto>>> Reset(NotificationTemplateCode code) =>
+        Respond(await _templates.ResetAsync(code));
 }

@@ -22,7 +22,7 @@ AUTH_OTP_VERIFY { contact, otp, name }    → { outcome: "SignedIn", isNewUser: 
 country code it's taken as +91, and an Indian mobile must be 10 digits starting 6–9). An account has
 an email, a number or both, at least one, each proved by a code. Numbers work only when the server
 can text codes (`Sms:Provider` not `None`); otherwise `AUTH_OPTIONS.phone` is false, the apps hide
-every number field, and a number is refused: "Mobile numbers can't be used yet. Use your email
+every number field, and a number is refused: "Mobile numbers can't be used yet. Use an email
 address." The admin portal still sends `{ email }` (email only) — admins sign in to the portal by email.
 
 Sign-up and sign-in are the same two steps. The app keeps `sessionToken` (phone keychain / browser
@@ -143,7 +143,7 @@ Whoever creates a tournament is its creator (`Tournaments.CreatedByUserId`) and 
 |---|---|---|---|---|
 | See it (home list, everything in it) | ✅ | ✅ | ✅ | 404 "Tournament not found." |
 | Edit it, its teams, groups, schedule; start; change dates; complete | ✅ | ✅ | 403 | 404 |
-| Add / remove owners and scorers (by sign-in email) | ✅ | ✅ (not the creator) | 403 | 404 |
+| Add / remove owners and scorers (by sign-in email or number; invites for anyone without an account) | ✅ | ✅ (not the creator) | 403 | 404 |
 | Set up and score matches (subject to the scorer lock) | ✅ | ✅ | ✅ | 404 |
 | Take over scoring without asking | ✅ | ✅ | asks instead | — |
 | Delete it | ✅ | 403 | 403 | 404 |
@@ -182,6 +182,57 @@ Tournament answers carry `access` (`myRoles`, `canEdit`, `canScore`, `canManageM
 **Existing tournaments** — the phase-3 migration makes started ones Live, the rest Upcoming, and
 System their creator and owner, so they show on nobody's list until
 `deploy/sql/04-take-over-existing-tournaments.sql` adds someone (by email) as an owner.
+
+## Invites (phase 6C)
+
+An owner adds an owner or scorer by the email or mobile number they sign in with
+(`TOURNAMENT_MEMBER_ADD { contact, role }`). An account with it is added at once ("Ravi Kumar is now
+a scorer."). Anyone else gets an **invite**: a `TournamentInvites` row (target, role, inviter), sent
+to them by email or text (`Messaging/`, the same delivery settings as codes; no code in it), valid
+`Auth:InviteDays` (30). When that person signs up — or adds that email or number to their account
+— `TournamentInviteService` turns the invite into the membership (the higher role if invited twice;
+an owner is never lowered).
+
+- The members services answer `{ members, invites, notice }`: invites for owners only, `notice` the
+  sentence to show ("No account uses ravi@example.com yet, so we've sent an invite. …").
+- `TOURNAMENT_INVITE_RESEND` sends it again and renews it; at most once a minute per invite (429
+  with the wait). Adding the same email or number again does the same, with the new role.
+- `TOURNAMENT_INVITE_CANCEL` cancels it (`IsDisabled`); an expired one stays listed as expired until
+  sent again or cancelled. Neither gives the role.
+- If sending fails the invite is still saved, and the notice says to send it again; the failure is
+  in ErrorLogs. By number with `Sms:Provider` None: refused, like every number.
+
+## Notifications (phase 6D)
+
+An inbox per person (`Notifications`), shown behind a bell on Home in both apps; the bell asks
+`NOTIFICATION_UNREAD` every 30 seconds while Home is on screen. `NOTIFICATION_LIST` pages it newest
+first; `NOTIFICATION_READ` / `READ_ALL` mark it. Only your own — someone else's id is a 404.
+
+What lands there (`Services/Notifications/Notifier.cs`, called by the service where it happens, saved
+with that change): a scoring request to the scorer, the answer to whoever asked, scoring taken over
+(by an owner, or because the scorer's app went quiet) to whoever held it; being made an owner or
+scorer; an invite taken up (to the newcomer and the inviter); a squad place given your email or
+number (now, or when you sign up); "all matches played" to the other owners after the last match
+(once per tournament); and an end-date reminder to owners, from 8 a.m. on the end date in the
+tournament's time zone, also **emailed** to owners who have an email (once per end date). Nobody
+hears about their own action. Notifications older than 90 days are deleted by the hourly job.
+
+### Message templates
+
+Every message — the sign-in, add-contact and delete-account codes, the tournament invite, and each
+notification — is worded by a row of `NotificationTemplates` (one per `NotificationTemplateCode`),
+edited on the admin portal's Messages page (`ADMIN_TEMPLATE_LIST`, `ADMIN_TEMPLATE_SAVE {…}`,
+`ADMIN_TEMPLATE_RESET`). A row has a switch and texts per channel — email (subject, body), text (body,
+DLT template id), inbox (title, text), push (title, text; empty = the inbox's) — with `{{Placeholders}}`
+filled in when it goes out. The API adds a row with the built-in wording
+(`Messaging/NotificationTemplateCatalog`) for any code the table lacks; templates are cached for a
+minute, and a portal save applies at once. Rules a save must keep: codes and invites go by email or
+text, whichever the person gave, so both stay on; code texts must contain `{{Code}}`; notifications
+never go by text; only the code's own placeholders. A row broken by hand in SQL is skipped (warning
+in the log) and the built-in wording used, so sign-in can't be broken. A notification with email on
+also emails the person (if they have an email) within 30 seconds (`NotificationEmailJob`).
+
+Push isn't built: it needs a development build and Firebase (`docs/phase-6-plan.md`).
 
 ## Players are people (phase 4)
 
@@ -290,7 +341,8 @@ Every change to permissions or ticks reloads the request check at once.
 (script `deploy/sql/03-tournament-access.sql`); `UserCricketProfiles`, `Players.UserId/EmailId/TournamentId`,
 `Teams.JoinCode` (script `deploy/sql/05-player-accounts.sql`); the portal password columns on `Users` and
 `UserSessions.IsPortal` (script `deploy/sql/06-admin-portal.sql`); `Users.PhoneVerifiedAt` and
-`Players.PhoneNumber` (script `deploy/sql/07-phone-identity.sql`). UserId 1 is **System**: no email, can't sign in, owns
+`Players.PhoneNumber` (script `deploy/sql/07-phone-identity.sql`); `TournamentInvites`
+(script `deploy/sql/08-tournament-invites.sql`); `Notifications` (script `deploy/sql/09-notifications.sql`); `NotificationTemplates` and the notification email columns (script `deploy/sql/10-notification-templates.sql`). UserId 1 is **System**: no email, can't sign in, owns
 pre-accounts data and is `CrdBy` on seeded and synced rows.
 
 ## Settings

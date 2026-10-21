@@ -2,6 +2,8 @@
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
+using TournamentScheduler.Api.Models.Messaging;
+using TournamentScheduler.Api.Models.Notifications;
 
 namespace TournamentScheduler.Api.Data;
 
@@ -33,7 +35,10 @@ public class TournamentDbContext : DbContext
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<TournamentMember> TournamentMembers => Set<TournamentMember>();
+    public DbSet<TournamentInvite> TournamentInvites => Set<TournamentInvite>();
     public DbSet<UserCricketProfile> UserCricketProfiles => Set<UserCricketProfile>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -361,6 +366,62 @@ public class TournamentDbContext : DbContext
 
             e.HasOne<Tournament>().WithMany().HasForeignKey(m => m.TournamentId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.User).WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Invites for people without an account yet (phase 6C).
+        modelBuilder.Entity<TournamentInvite>(e =>
+        {
+            e.ToTable("TournamentInvites");
+            e.HasKey(i => i.TournamentInviteId);
+            e.Property(i => i.Channel).HasConversion<string>().HasMaxLength(20);
+            e.Property(i => i.Target).HasMaxLength(256).IsRequired();
+            e.Property(i => i.MemberRole).HasConversion<string>().HasMaxLength(20);
+
+            // One open invite per person per tournament; accepted and cancelled ones are kept for the record.
+            e.HasIndex(i => new { i.TournamentId, i.Target }).IsUnique().HasFilter("[AcceptedAt] IS NULL AND [IsDisabled] = 0");
+            e.HasIndex(i => i.Target); // found when that person signs up
+
+            e.HasOne<Tournament>().WithMany().HasForeignKey(i => i.TournamentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // The inbox (phase 6D).
+        modelBuilder.Entity<Notification>(e =>
+        {
+            e.ToTable("Notifications");
+            e.HasKey(n => n.NotificationId);
+            e.Property(n => n.Kind).HasConversion<string>().HasMaxLength(30);
+            e.Property(n => n.Sport).HasConversion<string>().HasMaxLength(20);
+            e.Property(n => n.Title).HasMaxLength(200).IsRequired();
+            e.Property(n => n.Body).HasMaxLength(1000).IsRequired();
+            e.Property(n => n.DedupeKey).HasMaxLength(100);
+            e.Property(n => n.EmailTo).HasMaxLength(256);
+            e.Property(n => n.EmailSubject).HasMaxLength(200);
+            e.Property(n => n.EmailBody).HasMaxLength(4000);
+
+            e.HasIndex(n => new { n.UserId, n.NotificationId }); // a person's inbox, newest first
+            e.HasIndex(n => n.DedupeKey).HasFilter("[DedupeKey] IS NOT NULL");
+            e.HasIndex(n => n.CreatedAt); // the hourly purge
+
+            e.HasIndex(n => n.EmailSentAt).HasFilter("[EmailTo] IS NOT NULL AND [EmailSentAt] IS NULL"); // emails waiting to go
+
+            e.HasOne(n => n.User).WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // The wording of every message, editable in the admin portal (phase 6D).
+        modelBuilder.Entity<NotificationTemplate>(e =>
+        {
+            e.ToTable("NotificationTemplates");
+            e.HasKey(t => t.NotificationTemplateId);
+            e.Property(t => t.Code).HasConversion<string>().HasMaxLength(50);
+            e.Property(t => t.EmailSubject).HasMaxLength(200);
+            e.Property(t => t.EmailBody).HasMaxLength(4000);
+            e.Property(t => t.SmsBody).HasMaxLength(1000);
+            e.Property(t => t.SmsDltTemplateId).HasMaxLength(50);
+            e.Property(t => t.NotificationTitle).HasMaxLength(200);
+            e.Property(t => t.NotificationBody).HasMaxLength(1000);
+            e.Property(t => t.PushTitle).HasMaxLength(100);
+            e.Property(t => t.PushBody).HasMaxLength(500);
+            e.HasIndex(t => t.Code).IsUnique();
         });
 
         // --- Players are people (phase 4) ------------------------------------

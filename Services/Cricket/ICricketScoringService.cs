@@ -30,6 +30,9 @@ public interface ICricketScoringService
     Task<CricketResult<CricketMatch>> UndoLastBallAsync(int matchId);
     Task<CricketResult<CricketMatch>> SetBatterAsync(int matchId, NewBatterRequest request);
     Task<CricketResult<CricketMatch>> SetBowlerAsync(int matchId, NewBowlerRequest request);
+
+    /// <summary>Corrects a batter at the crease (their whole stay this innings) or the bowler of this over, picked by mistake.</summary>
+    Task<CricketResult<CricketMatch>> ReplacePlayerAsync(int matchId, ReplacePlayerRequest request);
     Task<CricketResult<CricketMatch>> EndInningsAsync(int matchId, EndInningsRequest request);
     Task<CricketResult<CricketMatch>> ReduceOversAsync(int matchId, ReduceOversRequest request);
     Task<CricketResult<CricketMatch>> EnforceFollowOnAsync(int matchId);

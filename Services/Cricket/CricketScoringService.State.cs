@@ -162,7 +162,7 @@ public partial class CricketScoringService
     }
 
     /// <summary>The over written out the way a scorer writes it: 1 · 4 · wd · W · 2 · nb1.</summary>
-    private static BallSummary ToBallSummary(CricketBall ball)
+    internal static BallSummary ToBallSummary(CricketBall ball)
     {
         string display;
         if (ball.IsWide)
@@ -245,6 +245,32 @@ public partial class CricketScoringService
                 .OrderBy(p => p.PlayerName)
                 .Select(ToMember)
                 .ToList();
+
+            // Corrections: who is at the crease or bowling now, and who could have been instead.
+            var appeared = Appeared(innings);
+            actions.ReplaceableBatters = match.Squad
+                .Where(p => p.PlayerId == innings.StrikerId || p.PlayerId == innings.NonStrikerId)
+                .Select(ToMember)
+                .ToList();
+            if (actions.ReplaceableBatters.Count > 0)
+                actions.BatterReplacements = match.Squad
+                    .Where(p => p.TeamId == innings.BattingTeamId
+                                && p.SquadStatus == CricketSquadStatus.Playing
+                                && !appeared.Contains(p.PlayerId))
+                    .OrderBy(p => p.BattingOrder ?? int.MaxValue)
+                    .ThenBy(p => p.PlayerName)
+                    .Select(ToMember)
+                    .ToList();
+            if (match.Squad.FirstOrDefault(p => p.PlayerId == innings.CurrentBowlerId) is { } bowler)
+            {
+                actions.ReplaceableBowler = ToMember(bowler);
+                actions.BowlerReplacements = match.Squad
+                    .Where(p => p.TeamId == innings.BowlingTeamId && p.PlayerId != bowler.PlayerId
+                                && BowlerProblem(match, innings, p.PlayerId) == null)
+                    .OrderBy(p => p.PlayerName)
+                    .Select(ToMember)
+                    .ToList();
+            }
 
             actions.PossibleDismissals = Enum.GetValues<DismissalType>()
                 .Where(d => d != DismissalType.LBW || match.Rules.LbwEnabled)

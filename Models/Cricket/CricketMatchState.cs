@@ -231,4 +231,14 @@ public class CricketActions
 
     /// <summary>Dismissals that are possible off the very next delivery, given the rules in force.</summary>
     public List<string> PossibleDismissals { get; set; } = new();
+
+    /// <summary>
+    /// Corrections (a player picked by mistake): the batters at the crease may be swapped for anyone in
+    /// the XI who hasn't batted in this innings — their whole stay moves across — and the bowler of
+    /// the over in progress for anyone allowed to bowl it. Empty when nothing can be corrected.
+    /// </summary>
+    public List<CricketSquadMember> ReplaceableBatters { get; set; } = new();
+    public List<CricketSquadMember> BatterReplacements { get; set; } = new();
+    public CricketSquadMember? ReplaceableBowler { get; set; }
+    public List<CricketSquadMember> BowlerReplacements { get; set; } = new();
 }

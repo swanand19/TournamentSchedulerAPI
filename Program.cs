@@ -7,6 +7,7 @@ using TournamentScheduler.Api.Services;
 using TournamentScheduler.Api.Services.Cricket;
 using TournamentScheduler.Api.Services.Football;
 using TournamentScheduler.Api.Services.Profiles;
+using TournamentScheduler.Api.Services.Watch;
 using System.Text.Json.Serialization;
 
 // `dotnet run -- gateway-keys new|show|ensure` manages the gateway's keys and exits.
@@ -57,6 +58,7 @@ builder.Services.AddScoped<ICricketScoringService, CricketScoringService>();
 builder.Services.AddScoped<ICricketMatchQueryService, CricketMatchQueryService>();
 builder.Services.AddScoped<ICricketStatsService, CricketStatsService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
+builder.Services.AddScoped<IWatchService, WatchService>();
 
 builder.Services.AddCors(options =>
 {

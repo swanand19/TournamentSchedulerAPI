@@ -110,3 +110,13 @@ public class CompleteCricketMatchRequest
     /// <summary>Record it as abandoned with no result, worth a point to each side.</summary>
     public bool NoResult { get; set; }
 }
+
+/// <summary>
+/// A batter or bowler was picked by mistake: <see cref="PlayerId"/> is who was recorded,
+/// <see cref="ReplacementId"/> who it really was. See <c>CricketScoringService.ReplacePlayerAsync</c>.
+/// </summary>
+public class ReplacePlayerRequest
+{
+    public int PlayerId { get; set; }
+    public int ReplacementId { get; set; }
+}

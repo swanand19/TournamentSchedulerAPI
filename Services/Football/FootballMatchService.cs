@@ -47,13 +47,18 @@ public class FootballMatchService : ServiceBase, IFootballMatchService
 
         if (match.Status != MatchStatus.NotStarted)
             return BadRequest("This match has already been set up or started.");
-        // Enforce: only one match in progress per tournament at a time
-        var conflicting = await _matches.AnyAsync(m =>
-            m.TournamentId == match.TournamentId &&
-            m.Id != id &&
-            (m.Status == MatchStatus.InProgress || m.Status == MatchStatus.Paused));
-        if (conflicting)
-            return Conflict("Another match in this tournament is already in progress. Finish or complete it before starting a new one.");
+        // Several matches may be played at once (more than one pitch), but a team can only be on one of them.
+        var teams = new[] { match.HomeTeamId, match.AwayTeamId }.Where(t => t != null).ToList();
+        var busy = teams.Count == 0 ? null : await _matches.QueryFirstOrDefaultAsync(q => q
+            .Where(m => m.TournamentId == match.TournamentId && m.Id != id
+                && (m.Status == MatchStatus.InProgress || m.Status == MatchStatus.Paused || m.Status == MatchStatus.PenaltyShootout)
+                && (teams.Contains(m.HomeTeamId) || teams.Contains(m.AwayTeamId)))
+            .Select(m => new { m.HomeTeamId, m.HomeTeamName, m.AwayTeamName }), tracking: false);
+        if (busy != null)
+        {
+            var team = teams.Contains(busy.HomeTeamId) ? busy.HomeTeamName : busy.AwayTeamName;
+            return Conflict($"{team} is playing {busy.HomeTeamName} v {busy.AwayTeamName} right now. Finish that match before starting this one.");
+        }
         if (request.DrawAllowed && request.ExtraTimeAllowed)
             return BadRequest("Draw allowed and extra time allowed can't both be enabled for the same match.");
         if (request.MaxPlayersPerSide < 1)

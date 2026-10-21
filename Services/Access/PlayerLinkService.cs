@@ -1,8 +1,11 @@
+using TournamentScheduler.Api.Auth;
 using TournamentScheduler.Api.Data.DataServices;
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
+using TournamentScheduler.Api.Models.Messaging;
 using TournamentScheduler.Api.Services.Accounts;
+using TournamentScheduler.Api.Services.Notifications;
 
 namespace TournamentScheduler.Api.Services.Access;
 
@@ -47,17 +50,26 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
     private readonly IDataService<User> _users;
     private readonly IDataService<Tournament> _tournaments;
     private readonly IDataService<UserCricketProfile> _profiles;
+    private readonly IDataService<Team> _teams;
+    private readonly INotifier _notifier;
+    private readonly ICurrentUser _currentUser;
 
     public PlayerLinkService(
         IDataService<Player> players,
         IDataService<User> users,
         IDataService<Tournament> tournaments,
-        IDataService<UserCricketProfile> profiles)
+        IDataService<UserCricketProfile> profiles,
+        IDataService<Team> teams,
+        INotifier notifier,
+        ICurrentUser currentUser)
     {
         _players = players;
         _users = users;
         _tournaments = tournaments;
         _profiles = profiles;
+        _teams = teams;
+        _notifier = notifier;
+        _currentUser = currentUser;
     }
 
     public async Task<ServiceError?> SetContactsAsync(Player place, int tournamentId, string? email, string? phone)
@@ -103,9 +115,22 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
         place.EmailId = newEmail;
         place.PhoneNumber = newPhone;
         if (user != null)
+        {
             await LinkAsync(place, user, await SportOf(tournamentId));
+            if (user.UserId != _currentUser.UserId)
+            {
+                await _notifier.NotifyAsync(user.UserId, NotificationTemplateCode.AddedToTeam, Notifier.With(
+                        ("ActorName", string.IsNullOrWhiteSpace(_currentUser.Name) ? "Someone" : _currentUser.Name),
+                        ("TeamName", await TeamNameAsync(place.TeamId)),
+                        ("TournamentName", await _notifier.TournamentNameAsync(tournamentId))),
+                    new NotificationLink(tournamentId));
+            }
+        }
         return null;
     }
+
+    private async Task<string> TeamNameAsync(int teamId) =>
+        await _teams.QueryFirstOrDefaultAsync(q => q.Where(t => t.Id == teamId).Select(t => t.Name), tracking: false) ?? "a team";
 
     public async Task LinkAsync(Player place, User user, Sport sport)
     {
@@ -161,6 +186,13 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
             if (!alreadyIn.Add(place.TournamentId)) continue;
             await LinkAsync(place, user, sports.GetValueOrDefault(place.TournamentId));
             linked++;
+
+            var by = phone != null && place.PhoneNumber == phone ? "number" : "email";
+            await _notifier.NotifyAsync(user.UserId, NotificationTemplateCode.JoinedTeamOnSignUp, Notifier.With(
+                    ("TeamName", await TeamNameAsync(place.TeamId)),
+                    ("TournamentName", await _notifier.TournamentNameAsync(place.TournamentId)),
+                    ("ContactKind", by)),
+                new NotificationLink(place.TournamentId));
         }
         return linked;
     }

@@ -1,8 +1,7 @@
-using System.Net;
-using System.Net.Mail;
 using Microsoft.Extensions.Options;
-using TournamentScheduler.Api.Logging;
+using TournamentScheduler.Api.Messaging;
 using TournamentScheduler.Api.Models.Accounts;
+using TournamentScheduler.Api.Models.Messaging;
 
 namespace TournamentScheduler.Api.Auth.Otp;
 
@@ -16,6 +15,18 @@ public sealed record OtpMessage(string To, string Code, int ValidMinutes, OtpPur
         OtpPurpose.AddContact => Channel == OtpChannel.Sms ? "adding this number" : "adding this email",
         _ => "sign-in"
     };
+
+    /// <summary>The template the message is worded by.</summary>
+    public NotificationTemplateCode TemplateCode => Purpose switch
+    {
+        OtpPurpose.DeleteAccount => NotificationTemplateCode.DeleteAccountCode,
+        OtpPurpose.AddContact => NotificationTemplateCode.AddContactCode,
+        _ => NotificationTemplateCode.SignInCode
+    };
+
+    /// <summary>The template's placeholders, with <paramref name="code"/> standing in for the code (the logs get "&lt;code&gt;").</summary>
+    public IReadOnlyDictionary<string, string> Values(string code) =>
+        new Dictionary<string, string> { ["Code"] = code, ["ValidMinutes"] = ValidMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture) };
 }
 
 /// <summary>
@@ -53,94 +64,36 @@ public sealed class OtpDispatcher(IServiceProvider services, IOptions<AuthOption
 }
 
 /// <summary>
-/// Real email over SMTP (the <c>Smtp</c> section). Each send is a RemoteLogs row with the address
-/// and subject — never the code.
+/// Real email over SMTP (the <c>Smtp</c> section), worded by the code's template (editable in the
+/// admin portal). Each send is a RemoteLogs row with the address and subject — never the code.
 /// </summary>
-public sealed class SmtpOtpSender(IOptions<SmtpOptions> options, RemoteCallRecorder remote) : IOtpSender
+public sealed class SmtpOtpSender(SmtpMailer mailer, NotificationTemplateStore templates) : IOtpSender
 {
-    private readonly SmtpOptions _smtp = options.Value;
-
     public async Task SendAsync(OtpMessage message, CancellationToken cancellationToken = default)
     {
-        if (!_smtp.IsConfigured)
-            throw new InvalidOperationException("Email isn't set up on the server (the Smtp section of appsettings is empty).");
-
-        var subjectAfterCode = message.Purpose switch
-        {
-            OtpPurpose.DeleteAccount => "is your code to delete your Tournament Scheduler account",
-            OtpPurpose.AddContact => "is your code to add this email to Tournament Scheduler",
-            _ => "is your Tournament Scheduler code"
-        };
-        var call = remote.Start("SMTP", "SEND", $"{_smtp.Host}:{_smtp.Port}", new { to = message.To, subject = $"<code> {subjectAfterCode}" });
-
-        using var mail = new MailMessage
-        {
-            From = new MailAddress(_smtp.FromAddress!, _smtp.FromName),
-            Subject = $"{message.Code} {subjectAfterCode}",
-            Body = message.Purpose switch
-            {
-                OtpPurpose.DeleteAccount => $"""
-                    Your code to delete your account is {message.Code}
-
-                    It works for {message.ValidMinutes} minutes. Deleting can't be undone. If you didn't ask for it,
-                    don't share the code with anyone, and sign out of all devices from the Account screen.
-
-                    Tournament Scheduler
-                    """,
-                OtpPurpose.AddContact => $"""
-                    Your code to add this email to your account is {message.Code}
-
-                    It works for {message.ValidMinutes} minutes. If you didn't ask for it, you can ignore this email —
-                    nothing changes without the code.
-
-                    Tournament Scheduler
-                    """,
-                _ => $"""
-                    Your sign-in code is {message.Code}
-
-                    It works for {message.ValidMinutes} minutes. If you didn't ask for it, you can ignore this email —
-                    nobody can sign in without the code.
-
-                    Tournament Scheduler
-                    """
-            }
-        };
-        mail.To.Add(message.To);
-
-        using var client = new SmtpClient(_smtp.Host, _smtp.Port)
-        {
-            EnableSsl = _smtp.EnableSsl,
-            DeliveryMethod = SmtpDeliveryMethod.Network,
-            Timeout = _smtp.TimeoutSeconds * 1000,
-            Credentials = string.IsNullOrEmpty(_smtp.UserName) ? null : new NetworkCredential(_smtp.UserName, _smtp.Password)
-        };
-
-        try
-        {
-            await client.SendMailAsync(mail, cancellationToken);
-            call.Succeeded(250, new { accepted = true });
-        }
-        catch (Exception e) when (e is SmtpException or InvalidOperationException or IOException)
-        {
-            call.Failed(e);
-            throw;
-        }
+        var template = await templates.GetAsync(message.TemplateCode, cancellationToken);
+        var mail = TemplateText.Email(template, message.Values(message.Code));
+        var logged = TemplateText.Email(template, message.Values("<code>")).Title;
+        await mailer.SendAsync(message.To, mail.Title, mail.Body, logged, cancellationToken);
     }
 }
-
 /// <summary>
 /// For development and a LAN test server before email or SMS is set up: the code goes to the API
 /// log and to a text file (<see cref="AuthOptions.DevCodeFile"/>) instead of an inbox or a phone.
 /// Anyone who can read that file can sign in as anyone, so this must never be on for real users.
 /// </summary>
-public sealed class LogOtpSender(IOptions<AuthOptions> options, TimeProvider clock, ILogger<LogOtpSender> logger) : IOtpSender
+public sealed class LogOtpSender(IOptions<AuthOptions> options, TimeProvider clock, NotificationTemplateStore templates, ILogger<LogOtpSender> logger) : IOtpSender
 {
     private static readonly Lock Gate = new();
 
-    public Task SendAsync(OtpMessage message, CancellationToken cancellationToken = default)
+    public async Task SendAsync(OtpMessage message, CancellationToken cancellationToken = default)
     {
         if (message.Channel == OtpChannel.Sms)
-            logger.LogWarning("Code for {What}, {Phone}: {Code} (Sms:Provider is Log — no text message was sent).", message.What, message.To, message.Code);
+        {
+            // The text its template would send, so a wording change can be checked before a provider exists.
+            var text = TemplateText.Sms(await templates.GetAsync(message.TemplateCode, cancellationToken), message.Values(message.Code));
+            logger.LogWarning("Code for {What}, {Phone}: {Code} (Sms:Provider is Log — no text message was sent). The text would read: {Text}", message.What, message.To, message.Code, text);
+        }
         else
             logger.LogWarning("Code for {What}, {Email}: {Code} (Auth:OtpDelivery is Log — no email was sent).", message.What, message.To, message.Code);
 
@@ -157,7 +110,5 @@ public sealed class LogOtpSender(IOptions<AuthOptions> options, TimeProvider clo
         {
             logger.LogWarning("Couldn't write the code to {File}: {Reason}", file, e.Message);
         }
-
-        return Task.CompletedTask;
     }
 }
