@@ -23,6 +23,9 @@ public sealed class RequestLogContext
     public string? DeviceId { get; set; }
     public string? Channel { get; set; }
 
+    /// <summary>The app version the gateway header names (null for direct calls).</summary>
+    public string? AppVersion { get; set; }
+
     /// <summary>The action's own URL (after the gateway's rewrite).</summary>
     public string? Url { get; set; }
 

@@ -4,6 +4,7 @@ using TournamentScheduler.Api.Data.DataServices;
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
+using TournamentScheduler.Api.Models.Public;
 
 namespace TournamentScheduler.Api.Services.Access;
 
@@ -47,6 +48,9 @@ public interface ITournamentContext
 
     /// <summary>The match the action is about, when it is about one (tracked, so the lock can be updated).</summary>
     IScoredMatch? Match { get; }
+
+    /// <summary>They follow it while it is public (6E): enough to view it, nothing more.</summary>
+    bool IsFollower { get; }
 }
 
 public sealed class TournamentContext : ITournamentContext
@@ -59,10 +63,12 @@ public sealed class TournamentContext : ITournamentContext
     public bool IsOwner => IsCreator || Role == TournamentMemberRole.Owner;
     public PlayerPlace? MyPlace { get; private set; }
     public IScoredMatch? Match { get; private set; }
+    public bool IsFollower { get; private set; }
 
-    public void Set(int tournamentId, TournamentStatus status, TournamentMemberRole? role, bool isCreator, PlayerPlace? myPlace, IScoredMatch? match)
+    public void Set(int tournamentId, TournamentStatus status, TournamentMemberRole? role, bool isCreator, PlayerPlace? myPlace, IScoredMatch? match, bool isFollower = false)
     {
         IsResolved = true;
+        IsFollower = isFollower;
         MyPlace = myPlace;
         TournamentId = tournamentId;
         Status = status;
@@ -103,7 +109,8 @@ public interface ITournamentAccessService
 /// <c>[TournamentAccess]</c>):
 /// <list type="number">
 /// <item>Find the tournament (from a match, team, schedule or the body). Missing → 404.</item>
-/// <item>Not a member and not playing in it → 404 as well: a stranger can't even learn a private tournament exists.</item>
+/// <item>Not a member and not playing in it → 404 as well: a stranger can't even learn a private tournament exists.
+/// Following a public tournament (6E) lets someone view it while it stays public.</item>
 /// <item>The role decides: View any member or player, Score owners and scorers, Edit and
 /// ManageMembers owners, Delete only the creator.</item>
 /// <item>A completed or cancelled tournament can't be changed; a match already in play can still be finished.</item>
@@ -128,6 +135,7 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
     private readonly IDataService<SavedSchedule> _schedules;
     private readonly IDataService<Player> _players;
     private readonly IDataService<User> _users;
+    private readonly IDataService<TournamentFollow> _follows;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly TournamentContext _context;
@@ -141,11 +149,13 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
         IDataService<SavedSchedule> schedules,
         IDataService<Player> players,
         IDataService<User> users,
+        IDataService<TournamentFollow> follows,
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         TournamentContext context,
         TimeProvider clock)
     {
+        _follows = follows;
         _tournaments = tournaments;
         _members = members;
         _matches = matches;
@@ -193,7 +203,7 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
 
         var tournament = await _tournaments.QueryFirstOrDefaultAsync(q => q
             .Where(t => t.Id == tournamentId)
-            .Select(t => new { t.Status, t.CreatedByUserId }), tracking: false);
+            .Select(t => new { t.Status, t.CreatedByUserId, t.IsPublic }), tracking: false);
         if (tournament == null) return new AccessOutcome(404, notFound);
 
         // 2. Who the caller is here. Strangers hear "not found", never "forbidden".
@@ -205,9 +215,11 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
         var place = await _players.QueryFirstOrDefaultAsync(q => q
             .Where(p => p.TournamentId == tournamentId && p.UserId == userId)
             .Select(p => new PlayerPlace(p.Id, p.TeamId)), tracking: false);
-        if (role == null && !isCreator && place == null) return new AccessOutcome(404, notFound);
+        // Following counts only while it stays public: switching it off shuts followers out at once.
+        var follows = tournament.IsPublic && await _follows.AnyAsync(f => f.TournamentId == tournamentId && f.UserId == userId);
+        if (role == null && !isCreator && place == null && !follows) return new AccessOutcome(404, notFound);
 
-        _context.Set(tournamentId.Value, tournament.Status, role, isCreator, place, match);
+        _context.Set(tournamentId.Value, tournament.Status, role, isCreator, place, match, follows);
 
         // 3. The role. Someone who only plays in it may look, nothing more.
         var allowed = permission switch

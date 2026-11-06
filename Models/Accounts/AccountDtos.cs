@@ -72,8 +72,14 @@ public class AuthOptionsDto
     /// <summary>Codes can be texted, so the apps offer mobile numbers (sign-in, account, players). Off until SMS is set up.</summary>
     public bool Phone { get; set; }
 
+    /// <summary>How a code to a number travels — "WhatsApp" or "Sms" — so the apps can say where to look; null while numbers are off.</summary>
+    public string? PhoneVia { get; set; }
+
     /// <summary>Added to a number typed without one.</summary>
     public string DefaultCountryCode { get; set; } = string.Empty;
+
+    /// <summary>Whether this app version is the latest, should update or must update (phone apps only; None for the web). HLD P-25.</summary>
+    public Versions.ClientUpdateDto ClientUpdate { get; set; } = new();
 }
 
 public class AccountDto

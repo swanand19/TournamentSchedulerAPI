@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
+using TournamentScheduler.Api.Realtime;
 using TournamentScheduler.Api.Services.Access;
 using TournamentScheduler.Api.Services.Knockouts;
 using TournamentScheduler.Api.Services.Notifications;
@@ -15,12 +16,14 @@ namespace TournamentScheduler.Api.Auth.TournamentAccess;
 /// or body, asks <see cref="ITournamentAccessService"/> whether the caller may, and refuses in the
 /// usual envelope if not. After a successful action it lets the service keep the scorer lock
 /// current, tells the owners when a scoring action finished the last match (phase 6D), and adds
-/// the <c>scoring</c> block to any match it answers with.
+/// the <c>scoring</c> block to any match it answers with. A change also nudges the tournament's
+/// and the match's live watchers.
 ///
 /// An action filter (not middleware) because it needs the bound body — the schedule approval names
 /// its tournament there.
 /// </summary>
-public sealed class TournamentAccessFilter(ITournamentAccessService access, INotifier notifier, IKnockoutService knockouts, ICurrentUser currentUser) : IAsyncActionFilter
+public sealed class TournamentAccessFilter(ITournamentAccessService access, INotifier notifier, IKnockoutService knockouts, ICurrentUser currentUser,
+    ITournamentContext tournament, ILiveUpdates live) : IAsyncActionFilter
 {
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
@@ -59,6 +62,11 @@ public sealed class TournamentAccessFilter(ITournamentAccessService access, INot
             await knockouts.AfterScoringAsync();
             await notifier.AfterScoringAsync();
         }
+
+        // Anything that may change something (viewing and reading never do) nudges whoever is watching the
+        // tournament and, for a match action, the match — they fetch it themselves (Realtime/LiveHub.cs).
+        if (rule.Permission != TournamentPermission.View && tournament.IsResolved && !HttpMethods.IsGet(context.HttpContext.Request.Method))
+            await live.TournamentChangedAsync(tournament.TournamentId, tournament.Match);
 
         switch ((executed.Result as ObjectResult)?.Value)
         {

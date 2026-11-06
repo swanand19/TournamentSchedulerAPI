@@ -8,8 +8,11 @@ public readonly record struct Contact(ContactKind Kind, string Value)
     public bool IsEmail => Kind == ContactKind.Email;
     public OtpChannel Channel => IsEmail ? OtpChannel.Email : OtpChannel.Sms;
 
-    /// <summary>Where a code sent to it arrives, in the words of a message: "the email", "the text message".</summary>
-    public string CodeArrivesIn => IsEmail ? "the email" : "the text message";
+    /// <summary>
+    /// Where a code sent to it arrives, in the words of a message: "the email", or "the WhatsApp
+    /// message" / "the text message" (<see cref="Auth.SmsOptions.PhoneMessage"/>).
+    /// </summary>
+    public string CodeArrivesIn(string phoneMessage) => IsEmail ? "the email" : $"the {phoneMessage}";
 }
 
 /// <summary>

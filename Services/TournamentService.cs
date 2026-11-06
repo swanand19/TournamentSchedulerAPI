@@ -6,7 +6,9 @@ using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
 using TournamentScheduler.Api.Services.Access;
+using TournamentScheduler.Api.Models.Public;
 using TournamentScheduler.Api.Services.Knockouts;
+using Microsoft.Extensions.Options;
 
 namespace TournamentScheduler.Api.Services;
 
@@ -45,6 +47,8 @@ public class TournamentService : ServiceBase, ITournamentService
     private readonly ITournamentContext _context;
     private readonly TimeProvider _clock;
     private readonly IKnockoutService _knockouts;
+    private readonly IDataService<TournamentFollow> _follows;
+    private readonly IOptions<PublicOptions> _public;
 
     public TournamentService(
         IDataService<Tournament> tournaments,
@@ -58,8 +62,12 @@ public class TournamentService : ServiceBase, ITournamentService
         ICurrentUser currentUser,
         ITournamentContext context,
         TimeProvider clock,
-        IKnockoutService knockouts)
+        IKnockoutService knockouts,
+        IDataService<TournamentFollow> follows,
+        IOptions<PublicOptions> publicOptions)
     {
+        _follows = follows;
+        _public = publicOptions;
         _tournaments = tournaments;
         _schedules = schedules;
         _teams = teams;
@@ -76,7 +84,7 @@ public class TournamentService : ServiceBase, ITournamentService
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
-    /// <summary>Only the caller's own tournaments: ones they created, own, score or play in.</summary>
+    /// <summary>Only the caller's own tournaments: ones they created, own, score, play in or follow.</summary>
     public async Task<ServiceResult<object>> GetAllAsync(Sport? sport)
     {
         var me = _currentUser.UserId;
@@ -87,7 +95,12 @@ public class TournamentService : ServiceBase, ITournamentService
         var playsIn = (await _players.QueryAsync(q => q
             .Where(p => p.UserId == me)
             .Select(p => p.TournamentId), tracking: false)).ToHashSet();
-        var ids = roleIn.Keys.Concat(playsIn).Distinct().ToList();
+        // Followed ones while they stay public (6E).
+        var followIds = await _follows.QueryAsync(q => q.Where(f => f.UserId == me).Select(f => f.TournamentId), tracking: false);
+        var follows = (await _tournaments.QueryAsync(q => q
+            .Where(t => followIds.Contains(t.Id) && t.IsPublic)
+            .Select(t => t.Id), tracking: false)).ToHashSet();
+        var ids = roleIn.Keys.Concat(playsIn).Concat(follows).Distinct().ToList();
 
         var tournaments = await _tournaments.QueryAsync(q =>
         {
@@ -128,17 +141,18 @@ public class TournamentService : ServiceBase, ITournamentService
             t.EndDate,
             t.HasSchedule,
             t.LatestScheduleId,
-            MyRoles = RolesOf(t.CreatedByUserId == me, roleIn.TryGetValue(t.Id, out var role) ? role : null, playsIn.Contains(t.Id))
+            MyRoles = RolesOf(t.CreatedByUserId == me, roleIn.TryGetValue(t.Id, out var role) ? role : null, playsIn.Contains(t.Id), follows.Contains(t.Id))
         }).ToList());
     }
 
-    private static List<string> RolesOf(bool isCreator, TournamentMemberRole? role, bool plays)
+    private static List<string> RolesOf(bool isCreator, TournamentMemberRole? role, bool plays, bool follows = false)
     {
         var roles = new List<string>();
         if (isCreator) roles.Add("creator");
         if (isCreator || role == TournamentMemberRole.Owner) roles.Add("owner");
         else if (role == TournamentMemberRole.Scorer) roles.Add("scorer");
         if (plays) roles.Add("player");
+        if (follows) roles.Add("follower");
         return roles;
     }
 
@@ -146,8 +160,23 @@ public class TournamentService : ServiceBase, ITournamentService
     {
         var tournament = await _tournaments.GetByIdAsync(id);
         if (tournament == null) return NotFound();
-        tournament.Access = await AccessFor(tournament);
+        await DescribeAsync(tournament);
         return Success(tournament);
+    }
+
+    /// <summary>The per-request parts of a tournament's answer: what the caller may do, and its public link while it has one.</summary>
+    private async Task DescribeAsync(Tournament tournament)
+    {
+        tournament.Access = await AccessFor(tournament);
+        tournament.Share = ShareFor(tournament, _public.Value);
+    }
+
+    /// <summary>The public link (6E) while it is public; the whole address when the server knows where the web app is.</summary>
+    public static PublicShareDto? ShareFor(Tournament tournament, PublicOptions options)
+    {
+        if (!tournament.IsPublic || tournament.PublicCode is not { } code) return null;
+        var site = options.WebAppUrl.Trim().TrimEnd('/');
+        return new PublicShareDto { Code = code, Url = site.Length == 0 ? null : $"{site}/live/{code}" };
     }
 
     /// <summary>What the caller may do here, for the apps' buttons.</summary>
@@ -158,16 +187,18 @@ public class TournamentService : ServiceBase, ITournamentService
 
         return new TournamentAccessDto
         {
-            MyRoles = RolesOf(_context.IsCreator, _context.Role, _context.MyPlace != null),
+            MyRoles = RolesOf(_context.IsCreator, _context.Role, _context.MyPlace != null, _context.IsFollower),
             MyPlayerId = _context.MyPlace?.PlayerId,
             MyTeamId = _context.MyPlace?.TeamId,
             CanEdit = _context.IsOwner && !closed,
             CanScore = _context.Role != null && !closed,
             CanManageMembers = _context.IsOwner,
             CanDelete = _context.IsCreator,
-            CanLeave = !_context.IsCreator,
+            // A follower who is nothing more stops following instead.
+            CanLeave = !_context.IsCreator && (_context.Role != null || _context.MyPlace != null),
             CanComplete = _context.IsOwner && tournament.Status == TournamentStatus.Live && inPlay == 0,
-            AllMatchesPlayed = tournament.Status == TournamentStatus.Live && total > 0 && over == total
+            AllMatchesPlayed = tournament.Status == TournamentStatus.Live && total > 0 && over == total,
+            IsFollowing = _context.IsFollower
         };
     }
 
@@ -243,7 +274,7 @@ public class TournamentService : ServiceBase, ITournamentService
         tournament.EndDate = request.EndDate;
         await _unitOfWork.SaveChangesAsync();
 
-        tournament.Access = await AccessFor(tournament);
+        await DescribeAsync(tournament);
         return Success(tournament);
     }
 
@@ -265,7 +296,7 @@ public class TournamentService : ServiceBase, ITournamentService
         tournament.CompletedByUserId = _currentUser.UserId;
         await _unitOfWork.SaveChangesAsync();
 
-        tournament.Access = await AccessFor(tournament);
+        await DescribeAsync(tournament);
         return Success(tournament);
     }
 

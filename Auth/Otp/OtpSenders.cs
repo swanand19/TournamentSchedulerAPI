@@ -40,9 +40,9 @@ public interface IOtpSender
 }
 
 /// <summary>
-/// Routes each code to its channel: emails by <c>Auth:OtpDelivery</c> (SMTP or the log), texts by
-/// <c>Sms:Provider</c>. Choosing an SMS provider later means one sender class for it and one line
-/// here; nothing else changes.
+/// Routes each code to its channel: emails by <c>Auth:OtpDelivery</c> (SMTP or the log), numbers by
+/// <c>Sms:Provider</c> (WhatsApp or the log). Another provider later means one sender class for it
+/// and one line here; nothing else changes.
 /// </summary>
 public sealed class OtpDispatcher(IServiceProvider services, IOptions<AuthOptions> auth, IOptions<SmsOptions> sms) : IOtpSender
 {
@@ -53,6 +53,7 @@ public sealed class OtpDispatcher(IServiceProvider services, IOptions<AuthOption
             OtpChannel.Sms => sms.Value.Provider switch
             {
                 SmsProvider.Log => services.GetRequiredService<LogOtpSender>(),
+                SmsProvider.WhatsApp => services.GetRequiredService<WhatsAppOtpSender>(),
                 _ => throw new InvalidOperationException("Text messages aren't set up on the server (the Sms section of appsettings).")
             },
             _ => auth.Value.OtpDelivery == OtpDelivery.Log
@@ -77,6 +78,18 @@ public sealed class SmtpOtpSender(SmtpMailer mailer, NotificationTemplateStore t
         await mailer.SendAsync(message.To, mail.Title, mail.Body, logged, cancellationToken);
     }
 }
+
+/// <summary>
+/// A code on WhatsApp, through the one authentication template (<c>WhatsApp:CodeTemplate</c>). Its
+/// wording is Meta's, not the portal's: the code goes in the body and again in the copy-code
+/// button. RemoteLogs gets "&lt;code&gt;" in its place.
+/// </summary>
+public sealed class WhatsAppOtpSender(WhatsAppClient whatsApp, IOptions<WhatsAppOptions> options) : IOtpSender
+{
+    public Task SendAsync(OtpMessage message, CancellationToken cancellationToken = default) =>
+        whatsApp.SendTemplateAsync(message.To, options.Value.CodeTemplate, [message.Code], message.Code, ["<code>"], cancellationToken);
+}
+
 /// <summary>
 /// For development and a LAN test server before email or SMS is set up: the code goes to the API
 /// log and to a text file (<see cref="AuthOptions.DevCodeFile"/>) instead of an inbox or a phone.

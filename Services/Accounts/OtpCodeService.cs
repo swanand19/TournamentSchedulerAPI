@@ -31,6 +31,7 @@ public class OtpCodeService : ServiceBase, IOtpCodeService
     private readonly IOtpSender _sender;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AuthOptions _options;
+    private readonly SmsOptions _sms;
     private readonly TimeProvider _clock;
     private readonly ILogger<OtpCodeService> _logger;
 
@@ -39,6 +40,7 @@ public class OtpCodeService : ServiceBase, IOtpCodeService
         IOtpSender sender,
         IUnitOfWork unitOfWork,
         IOptions<AuthOptions> options,
+        IOptions<SmsOptions> sms,
         TimeProvider clock,
         ILogger<OtpCodeService> logger)
     {
@@ -46,6 +48,7 @@ public class OtpCodeService : ServiceBase, IOtpCodeService
         _sender = sender;
         _unitOfWork = unitOfWork;
         _options = options.Value;
+        _sms = sms.Value;
         _clock = clock;
         _logger = logger;
     }
@@ -110,9 +113,7 @@ public class OtpCodeService : ServiceBase, IOtpCodeService
             else _logger.LogError(e, "Couldn't send a sign-in code.");
             _challenges.Remove(challenge);
             await _unitOfWork.SaveChangesAsync();
-            return Unavailable(to.IsEmail
-                ? "We couldn't send the email just now. Try again in a minute."
-                : "We couldn't send the text message just now. Try again in a minute.");
+            return Unavailable($"We couldn't send {to.CodeArrivesIn(_sms.PhoneMessage)} just now. Try again in a minute.");
         }
 
         return Success(new SendOtpResponse
@@ -129,7 +130,7 @@ public class OtpCodeService : ServiceBase, IOtpCodeService
     {
         var code = new string((otp ?? "").Where(ch => !char.IsWhiteSpace(ch)).ToArray());
         if (code.Length != _options.OtpLength || !code.All(char.IsAsciiDigit))
-            return (null, BadRequest($"Enter the {_options.OtpLength}-digit code from {to.CodeArrivesIn}."));
+            return (null, BadRequest($"Enter the {_options.OtpLength}-digit code from {to.CodeArrivesIn(_sms.PhoneMessage)}."));
 
         var now = Now;
         var target = to.Value;

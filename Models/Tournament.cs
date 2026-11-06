@@ -42,6 +42,20 @@ public class Tournament
     [NotMapped]
     public TournamentAccessDto? Access { get; set; }
 
+    /// <summary>The owners' switch (6E): anyone with the link may watch, without an account. Off by default.</summary>
+    public bool IsPublic { get; set; }
+
+    /// <summary>
+    /// The code in the public link (8 characters, no look-alikes), made the first time it is switched
+    /// on and replaced by "New link". Only ever shown through <see cref="Share"/>.
+    /// </summary>
+    [JsonIgnore]
+    public string? PublicCode { get; set; }
+
+    /// <summary>The public link while <see cref="IsPublic"/> — filled in per request, never stored.</summary>
+    [NotMapped]
+    public Public.PublicShareDto? Share { get; set; }
+
     [JsonIgnore]
     public bool IsClosed => Status is TournamentStatus.Completed or TournamentStatus.Cancelled;
 

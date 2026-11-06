@@ -44,7 +44,8 @@ ACCOUNT_CONTACT_REMOVE { kind }           → account; refused for the last way 
 `ACCOUNT_GET` says which can go (`canRemoveEmail`, `canRemovePhone`).
 
 Only `HEALTH_CHECK`, `AUTH_OPTIONS`, `AUTH_OTP_SEND` and `AUTH_OTP_VERIFY` (and the portal's
-`ADMIN_AUTH_SIGN_IN`) work without a session
+`ADMIN_AUTH_SIGN_IN`, and the read-only `PUBLIC_*` pages of a tournament its owners made public — phase 6E,
+limited per address) work without a session
 (`[AllowAnonymousService]`; the architecture tests hold the list). Everything else answers **401**,
 which sends both apps back to their sign-in screen with the message:
 
@@ -66,9 +67,12 @@ which sends both apps back to their sign-in screen with the message:
 - If the email or text can't be sent: 503 "We couldn't send the email (text message) just now…", and
   the code is removed so it doesn't count against the limits. The failure is in ErrorLogs; the SMTP
   call in RemoteLogs.
-- Delivery: `OtpDispatcher` picks the sender per code — email by `Auth:OtpDelivery`, texts by
-  `Sms:Provider`. Choosing an SMS provider means one sender class in `Otp/` plus its value in
-  `SmsProvider`; nothing else changes.
+- Delivery: `OtpDispatcher` picks the sender per code — email by `Auth:OtpDelivery`, numbers by
+  `Sms:Provider`: `Log` (codes in the log, for testing) or `WhatsApp` (Meta's Cloud API, one
+  approved authentication template; set-up and template wording in `Messaging/WhatsApp.md`).
+  Another provider means one sender class in `Otp/` plus its value in `SmsProvider`; nothing else
+  changes. `AUTH_OPTIONS.phoneVia` (`WhatsApp` | `Sms` | null) lets the apps say where the code
+  arrives; the server's own messages say "the WhatsApp message" or "the text message" to match.
 - Wrong code: "That code isn't right. 4 tries left." Expired or used: "This code has expired. Ask
   for a new one."
 
@@ -114,7 +118,7 @@ So an admin's "no" survives every deploy. The start-up log says what changed, e.
 
 **The check** (`PermissionAuthorizationMiddleware`, after the session check, on every request):
 
-1. Anonymous services (`[AllowAnonymousService]`: health, the two sign-in steps) — allowed.
+1. Anonymous services (`[AllowAnonymousService]`: health, the two sign-in steps, the public pages) — allowed.
 2. **Protected** services (`[ProtectedService]`: `AUTH_LOGOUT`, `AUTH_LOGOUT_ALL`, `ACCOUNT_GET`) —
    allowed for every signed-in user whatever the table says (for an admin-only one, always for
    Admin), so nobody can be locked out of signing out.

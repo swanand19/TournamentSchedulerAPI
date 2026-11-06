@@ -81,6 +81,7 @@ public sealed class ActivityLogMiddleware(
                 JourneyId = log.JourneyId,
                 DeviceId = log.DeviceId,
                 Channel = log.Channel,
+                AppVersion = log.AppVersion,
                 ServiceRequestId = serviceId,
                 ControllerName = action.ControllerName,
                 ActionName = action.ActionName,

@@ -82,6 +82,9 @@ public class TournamentAccessDto
 
     /// <summary>Live and every match is over: the apps ask once "All matches played. Mark the tournament complete?"</summary>
     public bool AllMatchesPlayed { get; set; }
+
+    /// <summary>They follow it (6E) — the apps offer "Stop following".</summary>
+    public bool IsFollowing { get; set; }
 }
 
 public class TournamentMemberDto

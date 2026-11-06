@@ -127,6 +127,9 @@ public class UserSession
     public string? Channel { get; set; }
     public string? DeviceId { get; set; }
 
+    /// <summary>The app version this device last used (kept current by the session check), for the portal's "devices on this version".</summary>
+    public string? AppVersion { get; set; }
+
     /// <summary>
     /// Signed in to the admin portal with a code and a password. Set only by the portal's own
     /// sign-in — never from the request's channel, which the caller chooses — and required for

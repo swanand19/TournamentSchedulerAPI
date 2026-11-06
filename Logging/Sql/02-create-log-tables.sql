@@ -1,7 +1,7 @@
 -- Step 2 of 3: the four log tables. Run after 01-create-log-database.sql, as a login that can
 -- create tables (your own admin login). Safe to run again: each migration is applied only once —
 -- so on a logs database made from an older copy of this script, it just adds what is new
--- (UserId columns, 2026-10-01).
+-- (UserId columns, 2026-10-01; AppVersion on MBActivityLogs and ErrorLogs, Channel on ErrorLogs, 2026-10-22).
 --
 -- Generated from the EF migrations — don't edit by hand. After adding a migration, regenerate with
 --   dotnet ef migrations script --context LogDbContext --idempotent --output Logging/Sql/02-create-log-tables.sql
@@ -242,6 +242,43 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20260930184406_AddUserIdToLogs', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261022064136_AddAppVersionToLogs'
+)
+BEGIN
+    ALTER TABLE [MBActivityLogs] ADD [AppVersion] nvarchar(50) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261022064136_AddAppVersionToLogs'
+)
+BEGIN
+    ALTER TABLE [ErrorLogs] ADD [AppVersion] nvarchar(50) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261022064136_AddAppVersionToLogs'
+)
+BEGIN
+    ALTER TABLE [ErrorLogs] ADD [Channel] nvarchar(30) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261022064136_AddAppVersionToLogs'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261022064136_AddAppVersionToLogs', N'10.0.9');
 END;
 
 COMMIT;

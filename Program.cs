@@ -9,6 +9,9 @@ using TournamentScheduler.Api.Services.Football;
 using TournamentScheduler.Api.Services.Profiles;
 using TournamentScheduler.Api.Services.Watch;
 using TournamentScheduler.Api.Services.Knockouts;
+using TournamentScheduler.Api.Services.Public;
+using TournamentScheduler.Api.Models.Public;
+using TournamentScheduler.Api.Realtime;
 using System.Text.Json.Serialization;
 
 // `dotnet run -- gateway-keys new|show|ensure` manages the gateway's keys and exits.
@@ -62,6 +65,16 @@ builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IWatchService, WatchService>();
 builder.Services.AddScoped<IKnockoutService, KnockoutService>();
 
+// Public live scores (6E): the owners' switch, following, and the anonymous public pages (limited per address).
+builder.Services.Configure<PublicOptions>(builder.Configuration.GetSection(PublicOptions.Section));
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<ITournamentSharingService, TournamentSharingService>();
+builder.Services.AddScoped<IPublicTournamentService, PublicTournamentService>();
+builder.Services.AddPublicRateLimit(builder.Configuration);
+
+// Live updates: a SignalR line that nudges the apps ("match 12 changed") so they fetch at once — see Realtime/LiveHub.cs.
+builder.Services.AddLiveUpdates();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -100,13 +113,17 @@ if (app.Configuration.GetValue("Hosting:RedirectToHttps", true))
 // calls are recorded too; enforcement before the session check, so a direct call that isn't allowed
 // hears that rather than "sign in"; then who is calling, then whether their role may call this at all.
 app.UseGateway();
+// The live line's own door: only a one-minute ticket from LIVE_TICKET opens it (it can't come through the gateway).
+app.UseLiveHubAuthentication();
 app.UseRouting();
 app.UseActivityLogging();
+app.UseRateLimiter(); // only the public pages carry a policy (Http/PublicRateLimit.cs)
 app.UseGatewayEnforcement();
 app.UseSessionAuthentication();
 app.UsePermissionAuthorization();
 app.UseAuthorization();
 app.MapControllers();
+app.MapLiveHub();
 
 app.Run();
 return 0;

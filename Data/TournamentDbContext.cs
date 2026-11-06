@@ -4,6 +4,7 @@ using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
 using TournamentScheduler.Api.Models.Messaging;
 using TournamentScheduler.Api.Models.Notifications;
+using TournamentScheduler.Api.Models.Versions;
 
 namespace TournamentScheduler.Api.Data;
 
@@ -37,9 +38,11 @@ public class TournamentDbContext : DbContext
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<TournamentMember> TournamentMembers => Set<TournamentMember>();
     public DbSet<TournamentInvite> TournamentInvites => Set<TournamentInvite>();
+    public DbSet<Models.Public.TournamentFollow> TournamentFollows => Set<Models.Public.TournamentFollow>();
     public DbSet<UserCricketProfile> UserCricketProfiles => Set<UserCricketProfile>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
+    public DbSet<AppStart> AppStarts => Set<AppStart>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -328,6 +331,7 @@ public class TournamentDbContext : DbContext
             e.Property(s => s.TokenHash).HasMaxLength(64).IsUnicode(false).IsRequired();
             e.Property(s => s.Channel).HasMaxLength(30);
             e.Property(s => s.DeviceId).HasMaxLength(100);
+            e.Property(s => s.AppVersion).HasMaxLength(20);
             e.Property(s => s.RevokedReason).HasMaxLength(100);
             e.HasIndex(s => s.TokenHash).IsUnique();
             e.HasIndex(s => s.UserId);
@@ -385,6 +389,21 @@ public class TournamentDbContext : DbContext
             e.Property(t => t.CreatedByUserId).HasDefaultValue(SystemUser.Id);
             e.Property(t => t.TimeZoneId).HasMaxLength(64).IsRequired().HasDefaultValue(Tournament.DefaultTimeZoneId);
             e.HasIndex(t => new { t.Status, t.EndDate }); // the hourly completion job
+
+            // Public live scores (6E): found by the code in the link.
+            e.Property(t => t.PublicCode).HasMaxLength(8);
+            e.HasIndex(t => t.PublicCode).IsUnique().HasFilter("[PublicCode] IS NOT NULL");
+        });
+
+        modelBuilder.Entity<Models.Public.TournamentFollow>(e =>
+        {
+            e.ToTable("TournamentFollows");
+            e.HasKey(f => f.TournamentFollowId);
+            e.HasIndex(f => new { f.TournamentId, f.UserId }).IsUnique();
+            e.HasIndex(f => f.UserId); // "my tournaments"
+
+            e.HasOne<Tournament>().WithMany().HasForeignKey(f => f.TournamentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<TournamentMember>(e =>
@@ -453,6 +472,19 @@ public class TournamentDbContext : DbContext
             e.Property(t => t.PushTitle).HasMaxLength(100);
             e.Property(t => t.PushBody).HasMaxLength(500);
             e.HasIndex(t => t.Code).IsUnique();
+        });
+
+        // Released app versions and forced updates, kept in the admin portal (HLD P-25).
+        modelBuilder.Entity<AppStart>(e =>
+        {
+            e.ToTable("AppStarts");
+            e.HasKey(a => a.AppStartId);
+            e.Property(a => a.Platform).HasConversion<string>().HasMaxLength(20);
+            e.Property(a => a.AppVersion).HasMaxLength(20).IsRequired();
+            e.Property(a => a.ApiVersion).HasMaxLength(20);
+            e.Property(a => a.Description).HasMaxLength(500);
+            e.Property(a => a.StoreUrl).HasMaxLength(500);
+            e.HasIndex(a => new { a.Platform, a.AppVersion }).IsUnique();
         });
 
         // --- Players are people (phase 4) ------------------------------------

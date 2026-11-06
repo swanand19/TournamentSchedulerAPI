@@ -42,6 +42,7 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
     private readonly IDataService<Match> _matches;
     private readonly IDataService<CricketMatch> _cricketMatches;
     private readonly IDataService<Notification> _notifications;
+    private readonly IDataService<Models.Public.TournamentFollow> _follows;
     private readonly IOtpCodeService _codes;
     private readonly IPlayerLinkService _links;
     private readonly IUnitOfWork _unitOfWork;
@@ -59,6 +60,7 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
         IDataService<Match> matches,
         IDataService<CricketMatch> cricketMatches,
         IDataService<Notification> notifications,
+        IDataService<Models.Public.TournamentFollow> follows,
         IOtpCodeService codes,
         IPlayerLinkService links,
         IUnitOfWork unitOfWork,
@@ -75,6 +77,7 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
         _matches = matches;
         _cricketMatches = cricketMatches;
         _notifications = notifications;
+        _follows = follows;
         _codes = codes;
         _links = links;
         _unitOfWork = unitOfWork;
@@ -161,6 +164,7 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
         // The person: signed out everywhere, nothing left that says who they were.
         _sessions.RemoveRange(await _sessions.ListAsync(s => s.UserId == me));
         _notifications.RemoveRange(await _notifications.ListAsync(n => n.UserId == me));
+        _follows.RemoveRange(await _follows.ListAsync(f => f.UserId == me));
         _challenges.RemoveRange(await _challenges.ListAsync(c => c.Target == email || c.Target == phone));
         if (await _profiles.GetByIdAsync(me) is { } profile) _profiles.Remove(profile);
 

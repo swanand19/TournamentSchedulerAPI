@@ -391,9 +391,9 @@ public static class InviteMessages
             ("ExpiresOn", invite.ExpiresAt.ToString("d MMM yyyy", CultureInfo.InvariantCulture)));
 
         if (invite.Channel == OtpChannel.Sms)
-            return new OutgoingMessage(OtpChannel.Sms, invite.Target, "", TemplateText.Sms(template, values), "Invite");
+            return new OutgoingMessage(OtpChannel.Sms, invite.Target, "", TemplateText.Sms(template, values), MessageDispatcher.InviteKind, values);
 
         var mail = TemplateText.Email(template, values);
-        return new OutgoingMessage(OtpChannel.Email, invite.Target, mail.Title, mail.Body, "Invite");
+        return new OutgoingMessage(OtpChannel.Email, invite.Target, mail.Title, mail.Body, MessageDispatcher.InviteKind);
     }
 }

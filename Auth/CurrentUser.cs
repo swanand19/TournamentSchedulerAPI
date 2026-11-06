@@ -51,12 +51,12 @@ public sealed class CurrentUser : ICurrentUser
 /// Where a request came from, as its gateway header says: which app, which install, which address.
 /// Controllers hand it to services that record it (sessions, code limits).
 /// </summary>
-public sealed record ClientInfo(string? Channel, string? DeviceId, string? Ip)
+public sealed record ClientInfo(string? Channel, string? DeviceId, string? Ip, string? AppVersion = null)
 {
     public static ClientInfo From(HttpContext context)
     {
         var log = RequestLogContext.Of(context);
-        return new ClientInfo(log?.Channel, log?.DeviceId, context.Connection.RemoteIpAddress?.ToString());
+        return new ClientInfo(log?.Channel, log?.DeviceId, context.Connection.RemoteIpAddress?.ToString(), log?.AppVersion);
     }
 
     public bool IsWeb => string.Equals(Channel, "WEB", StringComparison.OrdinalIgnoreCase);

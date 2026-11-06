@@ -8,14 +8,17 @@ using TournamentScheduler.Api.Models.Accounts;
 namespace TournamentScheduler.Api.Messaging;
 
 // Messages that aren't sign-in codes: invites (phase 6C) and end-date reminders (6D). They go
-// the same two ways as codes — email by Auth:OtpDelivery, text by Sms:Provider — but carry no
-// secret, so the Log senders write the whole message.
+// the same two ways as codes — email by Auth:OtpDelivery, a number by Sms:Provider — but carry no
+// secret, so the Log senders write the whole message. On WhatsApp only invites go out: Meta wants
+// an approved template per kind of message, and the rest are in the inbox and email anyway.
 
 /// <summary>
 /// One message to one person. <see cref="Subject"/> is for email only; a text is just
-/// <see cref="Body"/>. <see cref="Kind"/> names it in the logs ("Invite").
+/// <see cref="Body"/>. <see cref="Kind"/> names it in the logs ("Invite"). <see cref="Values"/> are
+/// the template's placeholders, for a WhatsApp template to be filled from.
 /// </summary>
-public sealed record OutgoingMessage(OtpChannel Channel, string To, string Subject, string Body, string Kind);
+public sealed record OutgoingMessage(OtpChannel Channel, string To, string Subject, string Body, string Kind,
+    IReadOnlyDictionary<string, string>? Values = null);
 
 /// <summary>Delivers a message by its channel. Throws when it can't, so the caller can say so.</summary>
 public interface IMessageSender
@@ -23,17 +26,31 @@ public interface IMessageSender
     Task SendAsync(OutgoingMessage message, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Email over SMTP or to the log (<c>Auth:OtpDelivery</c>); texts to the log or a provider (<c>Sms:Provider</c>).</summary>
-public sealed class MessageDispatcher(SmtpMailer smtp, IOptions<AuthOptions> auth, IOptions<SmsOptions> sms, ILogger<MessageDispatcher> logger) : IMessageSender
+/// <summary>Email over SMTP or to the log (<c>Auth:OtpDelivery</c>); numbers to the log or WhatsApp (<c>Sms:Provider</c>).</summary>
+public sealed class MessageDispatcher(
+    SmtpMailer smtp, WhatsAppClient whatsApp, IOptions<AuthOptions> auth, IOptions<SmsOptions> sms, IOptions<WhatsAppOptions> whatsAppOptions,
+    ILogger<MessageDispatcher> logger) : IMessageSender
 {
+    public const string InviteKind = "Invite";
+
     public Task SendAsync(OutgoingMessage message, CancellationToken cancellationToken = default)
     {
         if (message.Channel == OtpChannel.Sms)
         {
-            if (sms.Value.Provider != SmsProvider.Log)
-                throw new InvalidOperationException("Text messages aren't set up on the server (the Sms section of appsettings).");
-            logger.LogWarning("{Kind} for {Phone} (Sms:Provider is Log — no text message was sent): {Body}", message.Kind, message.To, message.Body);
-            return Task.CompletedTask;
+            switch (sms.Value.Provider)
+            {
+                case SmsProvider.Log:
+                    logger.LogWarning("{Kind} for {Phone} (Sms:Provider is Log — no text message was sent): {Body}", message.Kind, message.To, message.Body);
+                    return Task.CompletedTask;
+                case SmsProvider.WhatsApp when message.Kind == InviteKind:
+                    var options = whatsAppOptions.Value;
+                    var values = options.InviteOrder.Select(name => message.Values?.GetValueOrDefault(name) ?? "").ToList();
+                    return whatsApp.SendTemplateAsync(message.To, options.InviteTemplate, values, null, values, cancellationToken);
+                case SmsProvider.WhatsApp:
+                    throw new InvalidOperationException($"{message.Kind} messages aren't sent on WhatsApp.");
+                default:
+                    throw new InvalidOperationException("Messages to mobile numbers aren't set up on the server (the Sms section of appsettings).");
+            }
         }
 
         if (auth.Value.OtpDelivery == OtpDelivery.Log)

@@ -486,6 +486,10 @@ namespace TournamentScheduler.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("Channel")
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
@@ -1527,6 +1531,33 @@ namespace TournamentScheduler.Api.Migrations
                     b.ToTable("Players");
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Public.TournamentFollow", b =>
+                {
+                    b.Property<int>("TournamentFollowId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TournamentFollowId"));
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("TournamentFollowId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TournamentId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("TournamentFollows", (string)null);
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.SavedFixture", b =>
                 {
                     b.Property<int>("Id")
@@ -1680,12 +1711,19 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
 
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsStarted")
                         .HasColumnType("bit");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PublicCode")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
 
                     b.Property<int>("Sport")
                         .HasColumnType("int");
@@ -1708,9 +1746,72 @@ namespace TournamentScheduler.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PublicCode")
+                        .IsUnique()
+                        .HasFilter("[PublicCode] IS NOT NULL");
+
                     b.HasIndex("Status", "EndDate");
 
                     b.ToTable("Tournaments");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Versions.AppStart", b =>
+                {
+                    b.Property<int>("AppStartId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AppStartId"));
+
+                    b.Property<string>("ApiVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("AppVersion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsForceUpdate")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("ReleaseDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("StoreUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("AppStartId");
+
+                    b.HasIndex("Platform", "AppVersion")
+                        .IsUnique();
+
+                    b.ToTable("AppStarts", (string)null);
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.RolePermission", b =>
@@ -2187,6 +2288,21 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("Team");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Public.TournamentFollow", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Tournament", null)
+                        .WithMany()
+                        .HasForeignKey("TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.SavedFixture", b =>

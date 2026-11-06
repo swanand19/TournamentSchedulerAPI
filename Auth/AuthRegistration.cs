@@ -9,6 +9,7 @@ using TournamentScheduler.Api.Services.Access;
 using TournamentScheduler.Api.Services.Accounts;
 using TournamentScheduler.Api.Services.Admin;
 using TournamentScheduler.Api.Services.Notifications;
+using TournamentScheduler.Api.Services.Versions;
 
 namespace TournamentScheduler.Api.Auth;
 
@@ -20,6 +21,7 @@ public static class AuthRegistration
         services.Configure<AuthOptions>(configuration.GetSection(AuthOptions.Section));
         services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.Section));
         services.Configure<SmsOptions>(configuration.GetSection(SmsOptions.Section));
+        services.Configure<WhatsAppOptions>(configuration.GetSection(WhatsAppOptions.Section));
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddScoped<CurrentUser>();
@@ -52,6 +54,11 @@ public static class AuthRegistration
         services.AddSingleton<NotificationTemplateStore>();
         services.AddScoped<IAdminTemplateService, AdminTemplateService>();
 
+        // Released app versions and forced updates (HLD P-25): read by the gateway on every request, kept in the portal.
+        services.Configure<AppVersionOptions>(configuration.GetSection(AppVersionOptions.Section));
+        services.AddSingleton<AppVersionCache>();
+        services.AddScoped<IAdminAppVersionService, AdminAppVersionService>();
+
         // Players are people: squad places linked to accounts, by email or a team join code.
         services.AddScoped<IPlayerLinkService, PlayerLinkService>();
         services.AddScoped<ITeamJoinService, TeamJoinService>();
@@ -67,11 +74,14 @@ public static class AuthRegistration
         services.AddScoped<ITournamentLifecycleService, TournamentLifecycleService>();
         services.AddHostedService<TournamentLifecycleJob>();
 
-        // Codes and other messages (invites) go out by email or text; the dispatchers pick the sender per message.
+        // Codes and other messages (invites) go out by email, WhatsApp or the log; the dispatchers pick the sender per message.
         services.AddSingleton<RemoteCallRecorder>();
         services.AddSingleton<SmtpMailer>();
+        services.AddHttpClient(WhatsAppClient.HttpClientName);
+        services.AddSingleton<WhatsAppClient>();
         services.AddSingleton<IMessageSender, MessageDispatcher>();
         services.AddSingleton<SmtpOtpSender>();
+        services.AddSingleton<WhatsAppOtpSender>();
         services.AddSingleton<LogOtpSender>();
         services.AddSingleton<IOtpSender, OtpDispatcher>();
 

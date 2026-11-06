@@ -524,7 +524,12 @@ public class StatsService : IStatsService
             .ThenBy(r => r.TeamName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        for (var i = 0; i < ordered.Count; i++) ordered[i].Rank = i + 1;
+        // Places count within each group's table (1–4 in A, 1–4 in B), as on the cricket points table.
+        foreach (var group in ordered.GroupBy(r => r.GroupName))
+        {
+            var place = 0;
+            foreach (var row in group) row.Rank = ++place;
+        }
         return ordered;
     }
 

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using TournamentScheduler.Api.Http;
 using TournamentScheduler.Api.Logging;
+using TournamentScheduler.Api.Services.Versions;
 
 namespace TournamentScheduler.Api.Gateway;
 
@@ -43,6 +44,7 @@ public sealed class GatewayMiddleware(
     LogQueue logs,
     LogRedactor redactor,
     IOptions<LogStoreOptions> logOptions,
+    AppVersionCache versions,
     ILogger<GatewayMiddleware> logger)
 {
     private readonly GatewayOptions _options = options.Value;
@@ -211,11 +213,15 @@ public sealed class GatewayMiddleware(
         var key = decrypted.ContentKey;
 
         // The clear header is only trusted where the encrypted one agrees with it, so a captured
-        // body can't be replayed under a different service id, request id or time.
+        // body can't be replayed under a different service id, request id or time. Apps since
+        // 2026-10-22 also seal their channel and version (the update check reads them); older apps
+        // don't, so those two are compared only when sealed.
         var sealedHeader = decrypted.ProtectedHeader;
         if (GatewayCrypto.Text(sealedHeader, "serviceRequestId") != header.ServiceRequestId
             || GatewayCrypto.Text(sealedHeader, "requestUUID") != header.RequestUUID
-            || GatewayCrypto.Text(sealedHeader, "timestamp") != header.Timestamp)
+            || GatewayCrypto.Text(sealedHeader, "timestamp") != header.Timestamp
+            || GatewayCrypto.Text(sealedHeader, "channel") is { } sealedChannel && sealedChannel != header.Channel
+            || GatewayCrypto.Text(sealedHeader, "appVersion") is { } sealedVersion && sealedVersion != header.AppVersion)
         {
             logger.LogWarning("Gateway request header does not match its encrypted copy.");
             await WriteEncrypted(context, header, key, StatusCodes.Status400BadRequest,
@@ -254,6 +260,14 @@ public sealed class GatewayMiddleware(
         if (target == null)
         {
             await WriteEncrypted(context, header, key, StatusCodes.Status400BadRequest, payloadError!);
+            return;
+        }
+
+        // A phone app version that must update (P-25) can only reach what the update screen needs.
+        if (!AppVersionRules.AlwaysAllowed.Contains(service.Id)
+            && await versions.EvaluateAsync(header.Channel, header.AppVersion, context.RequestAborted) is { Status: Models.Versions.ClientUpdateStatus.Required } update)
+        {
+            await WriteEncrypted(context, header, key, StatusCodes.Status426UpgradeRequired, update.Message!);
             return;
         }
 
@@ -433,6 +447,7 @@ public sealed class GatewayMiddleware(
             request.SessionId = header.SessionId;
             request.DeviceId = header.DeviceId;
             request.Channel = header.Channel;
+            request.AppVersion = header.AppVersion;
         }
     }
 

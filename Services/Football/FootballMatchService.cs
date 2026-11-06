@@ -640,11 +640,14 @@ public class FootballMatchService : ServiceBase, IFootballMatchService
             PenaltyAwayScoreAfter = status.AwayScored
         });
 
+        // The running score is kept on the match after every kick, so the match list and the viewers
+        // show the shootout as it stands, not 0–0 until it's decided.
+        match.PenaltyHomeScore = status.HomeScored;
+        match.PenaltyAwayScore = status.AwayScored;
+
         if (status.Outcome != "InProgress")
         {
             match.PenaltyWinnerTeamId = status.Outcome == "HomeWins" ? match.HomeTeamId : match.AwayTeamId;
-            match.PenaltyHomeScore = status.HomeScored;
-            match.PenaltyAwayScore = status.AwayScored;
             match.Status = MatchStatus.Completed;
             match.CompletedAt = DateTime.UtcNow;
             match.IsClockRunning = false;

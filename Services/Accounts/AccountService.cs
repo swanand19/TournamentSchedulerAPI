@@ -6,12 +6,14 @@ using TournamentScheduler.Api.Data.DataServices;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
 using TournamentScheduler.Api.Services.Access;
+using TournamentScheduler.Api.Services.Versions;
 
 namespace TournamentScheduler.Api.Services.Accounts;
 
 public interface IAccountService
 {
-    AuthOptionsDto GetOptions();
+    /// <summary>What the sign-in screen offers, and whether this app version should (or must) update (P-25).</summary>
+    Task<AuthOptionsDto> GetOptionsAsync(ClientInfo client);
     Task<ServiceResult<SendOtpResponse>> SendOtpAsync(SendOtpRequest request, ClientInfo client);
     Task<ServiceResult<VerifyOtpResponse>> VerifyOtpAsync(VerifyOtpRequest request, ClientInfo client);
     Task<ServiceResult<bool>> LogoutAsync();
@@ -49,6 +51,7 @@ public class AccountService : ServiceBase, IAccountService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly SmsOptions _sms;
+    private readonly AppVersionCache _versions;
     private readonly TimeProvider _clock;
     private readonly ILogger<AccountService> _logger;
 
@@ -64,6 +67,7 @@ public class AccountService : ServiceBase, IAccountService
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         IOptions<SmsOptions> sms,
+        AppVersionCache versions,
         TimeProvider clock,
         ILogger<AccountService> logger)
     {
@@ -78,6 +82,7 @@ public class AccountService : ServiceBase, IAccountService
         _unitOfWork = unitOfWork;
         _currentUser = currentUser;
         _sms = sms.Value;
+        _versions = versions;
         _clock = clock;
         _logger = logger;
     }
@@ -87,7 +92,13 @@ public class AccountService : ServiceBase, IAccountService
     public const int NameMinLength = 2;
     public const int NameMaxLength = 100;
 
-    public AuthOptionsDto GetOptions() => new() { Phone = _sms.IsEnabled, DefaultCountryCode = Contacts.DefaultCountryCode };
+    public async Task<AuthOptionsDto> GetOptionsAsync(ClientInfo client) => new()
+    {
+        Phone = _sms.IsEnabled,
+        PhoneVia = !_sms.IsEnabled ? null : _sms.Provider == SmsProvider.WhatsApp ? "WhatsApp" : "Sms",
+        DefaultCountryCode = Contacts.DefaultCountryCode,
+        ClientUpdate = await _versions.EvaluateAsync(client.Channel, client.AppVersion)
+    };
 
     // -----------------------------------------------------------------
     // Step 1: send a code

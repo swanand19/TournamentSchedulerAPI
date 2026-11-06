@@ -157,6 +157,10 @@ dotnet run -- gateway-keys ensure    # make one only if there is none (Setup-Iis
   `Gateway:PlainServiceIds`. A skipped action is callable on its own URL *and* through the gateway.
   Only `HEALTH_CHECK` skips today — for the deploy scripts and uptime checks. The architecture test
   `OnlyReviewedServices_SkipEncryption` lists the allowed ones, so adding one is a deliberate change.
+- **The live line (`/hubs/live`, 2026-10-22):** the one way in that isn't through the gateway — a WebSocket is one long
+  connection, not a request the gateway can unwrap. It isn't an action, so enforcement passes it by; it opens only with a
+  one-minute, single-use ticket from `LIVE_TICKET` (a gateway service) and carries nothing but ids ("match 12 changed"):
+  the apps fetch the data itself through the gateway. See `Realtime/LiveHub.cs` and LLD 4.18.
 
 ## Known limits
 

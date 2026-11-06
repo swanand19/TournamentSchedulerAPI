@@ -29,14 +29,20 @@ public sealed record SessionCheck(SessionCheckOutcome Outcome, int UserId = 0, i
 
 public interface ISessionService
 {
-    /// <summary>Who a token belongs to, checked on every request. Moves the session's expiry forward now and then.</summary>
-    Task<SessionCheck> CheckAsync(string token);
+    /// <summary>
+    /// Who a token belongs to, checked on every request. Moves the session's expiry forward now and then,
+    /// and records the app version the device now runs (<paramref name="appVersion"/>) when it changed.
+    /// </summary>
+    Task<SessionCheck> CheckAsync(string token, string? appVersion = null);
 
     /// <summary>
     /// A new session for <paramref name="userId"/>: the token (given to the app once) and the stored row.
     /// <paramref name="portal"/> only from the admin portal's own sign-in (code and password).
     /// </summary>
     (string Token, UserSession Session) Start(int userId, ClientInfo client, bool portal = false);
+
+    /// <summary>Which of these sessions can still be used: not signed out, expired, blocked or deleted. For the live lines' sweep.</summary>
+    Task<HashSet<Guid>> ActiveAmongAsync(IReadOnlyCollection<Guid> sessionIds);
 }
 
 /// <summary>
@@ -75,6 +81,7 @@ public class SessionService : ServiceBase, ISessionService
             TokenHash = hash,
             Channel = Trim(client.Channel, 30),
             DeviceId = Trim(client.DeviceId, 100),
+            AppVersion = Trim(client.AppVersion, 20),
             Crd = now,
             LastSeenAt = now,
             IsPortal = portal,
@@ -84,7 +91,7 @@ public class SessionService : ServiceBase, ISessionService
         return (token, session);
     }
 
-    public async Task<SessionCheck> CheckAsync(string token)
+    public async Task<SessionCheck> CheckAsync(string token, string? appVersion = null)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length > 200) return new SessionCheck(SessionCheckOutcome.Unknown);
 
@@ -99,6 +106,7 @@ public class SessionService : ServiceBase, ISessionService
                 s.IsPortal,
                 s.LastSeenAt,
                 s.ExpiresAt,
+                s.AppVersion,
                 s.RevokedAt,
                 s.User!.Name,
                 s.User.RoleId,
@@ -112,18 +120,36 @@ public class SessionService : ServiceBase, ISessionService
         if (found.ExpiresAt <= now) return new SessionCheck(SessionCheckOutcome.Expired);
         if (found.IsDisabled) return new SessionCheck(SessionCheckOutcome.Blocked);
 
-        if (now - found.LastSeenAt >= TimeSpan.FromMinutes(_options.SessionTouchMinutes))
+        var version = Trim(appVersion, 20);
+        var touch = now - found.LastSeenAt >= TimeSpan.FromMinutes(_options.SessionTouchMinutes);
+        var updated = version != null && version != found.AppVersion; // an app update shows in the portal at once
+        if (touch || updated)
         {
             var session = await _sessions.GetByIdAsync(found.SessionId);
             if (session != null)
             {
-                session.LastSeenAt = now;
-                session.ExpiresAt = now + Lifetime(session.Channel, session.IsPortal);
+                if (touch)
+                {
+                    session.LastSeenAt = now;
+                    session.ExpiresAt = now + Lifetime(session.Channel, session.IsPortal);
+                }
+                if (updated) session.AppVersion = version;
                 await _unitOfWork.SaveChangesAsync();
             }
         }
 
         return new SessionCheck(SessionCheckOutcome.SignedIn, found.UserId, found.RoleId, found.Name, found.SessionId, found.IsPortal);
+    }
+
+    public async Task<HashSet<Guid>> ActiveAmongAsync(IReadOnlyCollection<Guid> sessionIds)
+    {
+        if (sessionIds.Count == 0) return [];
+        var now = Now;
+        var active = await _sessions.QueryAsync(q => q
+            .Where(s => sessionIds.Contains(s.SessionId) && s.RevokedAt == null && s.ExpiresAt > now
+                        && !s.User!.IsDisabled && s.User.DeletedOn == null)
+            .Select(s => s.SessionId), tracking: false);
+        return active.ToHashSet();
     }
 
     private static string? Trim(string? value, int max) => value is { Length: > 0 } ? value.Length > max ? value[..max] : value : null;

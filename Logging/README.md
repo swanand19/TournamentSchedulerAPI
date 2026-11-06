@@ -13,7 +13,9 @@ it is the app's own `requestUUID`, and every response carries it back as `X-Requ
 
 Every row of the first three carries **`UserId`** once someone is signed in (null for sign-in
 itself and anonymous calls), and `SessionId` is the session the sealed token really belongs to —
-not whatever the clear header claimed.
+not whatever the clear header claimed. `MBActivityLogs` and `ErrorLogs` also carry the app's
+`Channel` and `AppVersion` from the gateway header (null for direct calls), so you can see which
+build a request or an error came from without joining to `MBMiddlewareLogs`.
 
 ## How it works
 
@@ -134,6 +136,14 @@ GROUP BY ServiceRequestId ORDER BY AvgMs DESC;
 -- One app launch, in order
 SELECT StartDate, ServiceRequestId, HttpStatusCode, StatusMessage FROM MBActivityLogs
 WHERE JourneyId = '…' ORDER BY StartDate;
+
+-- Which builds a failing service fails for (AppVersion is the app's own version; null for direct calls)
+SELECT Channel, AppVersion, COUNT(*) AS Calls, SUM(CASE WHEN HttpStatusCode >= 400 THEN 1 ELSE 0 END) AS Failed
+FROM MBActivityLogs WHERE ServiceRequestId = 'CRICKET_BALL_RECORD' AND StartDate > DATEADD(day, -1, SYSUTCDATETIME())
+GROUP BY Channel, AppVersion ORDER BY Failed DESC;
+
+-- Latest errors with the build they came from
+SELECT TOP 50 Crd, Channel, AppVersion, ServiceRequestId, Message FROM ErrorLogs ORDER BY Crd DESC;
 
 -- Everything one person did today (UserId from the game database's Users table)
 SELECT StartDate, ServiceRequestId, HttpStatusCode, StatusMessage, Channel FROM MBActivityLogs

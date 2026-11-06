@@ -6,6 +6,7 @@ using TournamentScheduler.Api.Gateway;
 using TournamentScheduler.Api.Http;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Messaging;
+using TournamentScheduler.Api.Models.Versions;
 using TournamentScheduler.Api.Services.Admin;
 
 namespace TournamentScheduler.Api.Controllers;
@@ -215,4 +216,44 @@ public class AdminTemplatesController : ApiController
     [ServiceRequestId("ADMIN_TEMPLATE_RESET")]
     public async Task<ActionResult<ApiResponse<AdminTemplateDto>>> Reset(NotificationTemplateCode code) =>
         Respond(await _templates.ResetAsync(code));
+}
+
+/// <summary>Released phone-app versions and forced updates (HLD P-25): one list for every platform.</summary>
+[ApiController]
+[Route("api/admin/app-versions")]
+[DefaultRoles(RoleIds.Admin)]
+[AdminOnly]
+[NotTournamentScoped]
+public class AdminAppVersionsController : ApiController
+{
+    private readonly IAdminAppVersionService _versions;
+
+    public AdminAppVersionsController(IAdminAppVersionService versions)
+    {
+        _versions = versions;
+    }
+
+    // GET api/admin/app-versions — every release, newest first, with devices still on each
+    [HttpGet]
+    [ServiceRequestId("ADMIN_APP_VERSION_LIST")]
+    public async Task<ActionResult<ApiResponse<AppVersionListDto>>> List() =>
+        Respond(await _versions.ListAsync());
+
+    // POST api/admin/app-versions — { platform, appVersion, apiVersion?, description?, isForceUpdate, releaseDate, storeUrl? }
+    [HttpPost]
+    [ServiceRequestId("ADMIN_APP_VERSION_CREATE")]
+    public async Task<ActionResult<ApiResponse<AppVersionListDto>>> Create([FromBody] SaveAppStartRequest request) =>
+        Respond(await _versions.CreateAsync(request));
+
+    // PUT api/admin/app-versions/12 — the whole release
+    [HttpPut("{appStartId}")]
+    [ServiceRequestId("ADMIN_APP_VERSION_UPDATE")]
+    public async Task<ActionResult<ApiResponse<AppVersionListDto>>> Update(int appStartId, [FromBody] SaveAppStartRequest request) =>
+        Respond(await _versions.UpdateAsync(appStartId, request));
+
+    // PUT api/admin/app-versions/12/disabled — { disabled }: withdraw a pulled build, or bring it back
+    [HttpPut("{appStartId}/disabled")]
+    [ServiceRequestId("ADMIN_APP_VERSION_SET_DISABLED")]
+    public async Task<ActionResult<ApiResponse<AppVersionListDto>>> SetDisabled(int appStartId, [FromBody] SetAppStartDisabledRequest request) =>
+        Respond(await _versions.SetDisabledAsync(appStartId, request.Disabled));
 }

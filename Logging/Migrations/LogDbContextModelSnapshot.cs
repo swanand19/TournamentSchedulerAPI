@@ -30,6 +30,14 @@ namespace TournamentScheduler.Api.Logging.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ErrorLogId"));
 
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Channel")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
                     b.Property<DateTime>("Crd")
                         .HasColumnType("datetime2(3)");
 
@@ -96,6 +104,10 @@ namespace TournamentScheduler.Api.Logging.Migrations
                     b.Property<string>("ActionName")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("Channel")
                         .HasMaxLength(30)

@@ -28,12 +28,12 @@ public class AuthController : ApiController
         _accounts = accounts;
     }
 
-    // GET api/auth/options — what the sign-in screen offers (mobile numbers only once texts are set up)
+    // GET api/auth/options — what the sign-in screen offers (mobile numbers only once texts are set up), and whether this app version must update
     [HttpGet("options")]
     [ServiceRequestId("AUTH_OPTIONS")]
     [AllowAnonymousService]
-    public ActionResult<ApiResponse<AuthOptionsDto>> Options() =>
-        Respond(ServiceResult<AuthOptionsDto>.Ok(_accounts.GetOptions()));
+    public async Task<ActionResult<ApiResponse<AuthOptionsDto>>> Options() =>
+        Respond(ServiceResult<AuthOptionsDto>.Ok(await _accounts.GetOptionsAsync(Client)));
 
     // POST api/auth/otp/send — { contact } (email or mobile number); the same answer whether or not it has an account
     [HttpPost("otp/send")]

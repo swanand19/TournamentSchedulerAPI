@@ -44,6 +44,7 @@ public class LogDbContext(DbContextOptions<LogDbContext> options) : DbContext(op
             e.Property(x => x.JourneyId).HasMaxLength(100);
             e.Property(x => x.DeviceId).HasMaxLength(100);
             e.Property(x => x.Channel).HasMaxLength(30);
+            e.Property(x => x.AppVersion).HasMaxLength(50);
             e.Property(x => x.ServiceRequestId).HasMaxLength(100);
             e.Property(x => x.ControllerName).HasMaxLength(100);
             e.Property(x => x.ActionName).HasMaxLength(100);
@@ -61,6 +62,8 @@ public class LogDbContext(DbContextOptions<LogDbContext> options) : DbContext(op
         {
             e.ToTable("ErrorLogs");
             e.HasKey(x => x.ErrorLogId);
+            e.Property(x => x.Channel).HasMaxLength(30);
+            e.Property(x => x.AppVersion).HasMaxLength(50);
             e.Property(x => x.ServiceRequestId).HasMaxLength(100);
             e.Property(x => x.Url).HasMaxLength(2048);
             e.Property(x => x.ExceptionType).HasMaxLength(500);

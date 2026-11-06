@@ -56,6 +56,9 @@ public class ProfileService : ServiceBase, IProfileService
         _currentUser = currentUser;
     }
 
+    /// <summary>The viewer; null for someone watching a public tournament without an account (6E).</summary>
+    private int? Me => _currentUser.IsSignedIn ? _currentUser.UserId : null;
+
     /// <summary>A squad place linked to the person, with its team and tournament.</summary>
     private sealed record Place(
         int PlayerId, int TeamId, string TeamName, bool IsCaptain,
@@ -71,7 +74,7 @@ public class ProfileService : ServiceBase, IProfileService
         var (user, error) = await ResolveAsync(userId, playerId);
         if (user == null) return error!.Value;
 
-        var me = user.UserId == _currentUser.UserId;
+        var me = user.UserId == Me;
         var places = await PlacesAsync(user.UserId);
 
         var profile = new ProfileDto
@@ -128,7 +131,7 @@ public class ProfileService : ServiceBase, IProfileService
         {
             UserId = user.UserId,
             Name = user.Name,
-            IsMe = user.UserId == _currentUser.UserId,
+            IsMe = user.UserId == Me,
             Sport = sport.ToString()
         };
 
@@ -409,12 +412,12 @@ public class ProfileService : ServiceBase, IProfileService
             userId = linked;
         }
 
-        var id = userId ?? _currentUser.UserId;
+        var id = userId ?? Me;
         var user = await _users.FirstOrDefaultAsync(u => u.UserId == id, tracking: false);
         if (user == null || user.DeletedOn != null || user.IsDisabled || user.UserId == SystemUser.Id)
             return (null, NotFound("Profile not found."));
 
-        if (user.UserId != _currentUser.UserId && !await _players.AnyAsync(p => p.UserId == user.UserId))
+        if (user.UserId != Me && !await _players.AnyAsync(p => p.UserId == user.UserId))
             return (null, NotFound("Profile not found."));
 
         return (user, null);

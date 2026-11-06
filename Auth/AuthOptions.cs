@@ -92,15 +92,18 @@ public sealed class SmtpOptions
 /// <summary>
 /// The <c>Sms</c> section: how sign-in codes reach a mobile number (phase 6B). <c>None</c> (the
 /// default) switches phone numbers off in both apps; <c>Log</c> writes texted codes to the log and
-/// <see cref="AuthOptions.DevCodeFile"/> like email codes, for development and LAN testing.
-/// A real provider adds its value here, a sender class in Auth/Otp, and uses the keys below.
-/// The keys belong in the server's own appsettings or user secrets, never in the repo.
+/// <see cref="AuthOptions.DevCodeFile"/> like email codes, for development and LAN testing;
+/// <c>WhatsApp</c> sends codes and invites through Meta's WhatsApp Cloud API (the <c>WhatsApp</c>
+/// section). The keys belong in the server's own appsettings or user secrets, never in the repo.
 /// </summary>
 public sealed class SmsOptions
 {
     public const string Section = "Sms";
 
     public SmsProvider Provider { get; set; } = SmsProvider.None;
+
+    /// <summary>What a message to a number is called in what people read: "the WhatsApp message", "the text message".</summary>
+    public string PhoneMessage => Provider == SmsProvider.WhatsApp ? "WhatsApp message" : "text message";
 
     /// <summary>The provider's API key.</summary>
     public string? ApiKey { get; set; }
@@ -117,5 +120,53 @@ public sealed class SmsOptions
 public enum SmsProvider
 {
     None,
-    Log
+    Log,
+    WhatsApp
+}
+
+/// <summary>
+/// The <c>WhatsApp</c> section, used when <c>Sms:Provider</c> is <c>WhatsApp</c>. Meta only lets a
+/// business start a conversation with a template it has approved, so each kind of message names
+/// its template here, and the wording lives at Meta (Messaging/WhatsApp.md has the texts to submit).
+/// The access token belongs in the server's own appsettings or user secrets, never in the repo.
+/// </summary>
+public sealed class WhatsAppOptions
+{
+    public const string Section = "WhatsApp";
+
+    public string BaseUrl { get; set; } = "https://graph.facebook.com";
+    public string ApiVersion { get; set; } = "v23.0";
+
+    /// <summary>The sending number's id in Meta's WhatsApp Manager (not the number itself).</summary>
+    public string? PhoneNumberId { get; set; }
+
+    /// <summary>A system user's permanent token with whatsapp_business_messaging.</summary>
+    public string? AccessToken { get; set; }
+
+    /// <summary>The language every template was approved in.</summary>
+    public string Language { get; set; } = "en";
+
+    /// <summary>
+    /// The authentication template every code uses — sign-in, adding a number, deleting the account.
+    /// Meta fixes its wording ("123456 is your verification code."), so one serves all three.
+    /// </summary>
+    public string CodeTemplate { get; set; } = "sign_in_code";
+
+    /// <summary>The utility template for an invite to own or score a tournament.</summary>
+    public string InviteTemplate { get; set; } = "tournament_invite";
+
+    /// <summary>
+    /// The invite's placeholders in the order of the template's {{1}}, {{2}}, … — names from the
+    /// TournamentInvite template (InviterName, Role, TournamentName, Sport, RoleAction, ExpiresOn).
+    /// Empty means <see cref="DefaultInviteParameters"/> (a default here would be added to, not replaced, by the binder).
+    /// </summary>
+    public string[]? InviteParameters { get; set; }
+
+    public static readonly string[] DefaultInviteParameters = ["InviterName", "Role", "TournamentName", "ExpiresOn"];
+
+    public IReadOnlyList<string> InviteOrder => InviteParameters is { Length: > 0 } p ? p : DefaultInviteParameters;
+
+    public int TimeoutSeconds { get; set; } = 15;
+
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(PhoneNumberId) && !string.IsNullOrWhiteSpace(AccessToken);
 }

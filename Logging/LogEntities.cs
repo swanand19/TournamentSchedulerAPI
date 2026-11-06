@@ -52,6 +52,10 @@ public class MBActivityLog
     public string? JourneyId { get; set; }
     public string? DeviceId { get; set; }
     public string? Channel { get; set; }
+
+    /// <summary>The build that sent it (the gateway header's appVersion); null for direct calls.</summary>
+    public string? AppVersion { get; set; }
+
     public string? ServiceRequestId { get; set; }
     public string? ControllerName { get; set; }
     public string? ActionName { get; set; }
@@ -88,6 +92,10 @@ public class ErrorLog
 
     /// <summary>Who was signed in, when it happened inside a signed-in request.</summary>
     public int? UserId { get; set; }
+
+    /// <summary>Which app and build the request came from, so a fault one release causes stands out.</summary>
+    public string? Channel { get; set; }
+    public string? AppVersion { get; set; }
 
     public string? ServiceRequestId { get; set; }
     public string? Url { get; set; }
