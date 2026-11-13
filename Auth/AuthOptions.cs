@@ -59,8 +59,32 @@ public sealed class AuthOptions
     public OtpDelivery OtpDelivery { get; set; } = OtpDelivery.Smtp;
 
     /// <summary>Where <c>Log</c> delivery writes codes, one line each.</summary>
-    public string DevCodeFile { get; set; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TournamentScheduler", "logs", "otp-codes.txt");
+    public string DevCodeFile { get; set; } = Hosting.AppPaths.Under("logs", "otp-codes.txt");
+
+    /// <summary>
+    /// The one account an app store's reviewers sign in with (Google Play's "App access"). Off unless both
+    /// fields are set.
+    /// </summary>
+    public ReviewAccountOptions ReviewAccount { get; set; } = new();
+}
+
+/// <summary>
+/// An app store reviewer can't receive our emails, so this one email gets a fixed code instead of a sent
+/// one. Everything else about the code is unchanged: it's asked for the same way, lasts 5 minutes, allows
+/// 5 tries and is used once; the send limits still apply. It works for signing in and for confirming
+/// account deletion (reviewers check that deletion works), never for adding an email or number. The account
+/// is an ordinary one: it can never sign in to the admin portal, whatever its role. Switch it off (clear
+/// the code) once the review is over.
+/// </summary>
+public sealed class ReviewAccountOptions
+{
+    public string? Email { get; set; }
+    public string? Code { get; set; }
+
+    public bool IsFor(string? email, int codeLength) =>
+        !string.IsNullOrWhiteSpace(Email) && email != null
+        && string.Equals(email, Email.Trim(), StringComparison.OrdinalIgnoreCase)
+        && Code is { } code && code.Length == codeLength && code.All(char.IsAsciiDigit);
 }
 
 public enum OtpDelivery

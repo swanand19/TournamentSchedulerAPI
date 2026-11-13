@@ -35,21 +35,23 @@ namespace TournamentScheduler.Api.Migrations
             // "stopped mid-period", which lets the referee end the period explicitly.
             //   MatchStatus: 0 NotStarted, 1 InProgress, 2 Paused, 3 Completed, 4 PenaltyShootout
             //   PeriodState: 0 NotStarted, 1 InPlay,     2 Stopped, 3 Ended
+            // In EXEC(N'…') because the generated idempotent script is one batch, and SQL Server refuses a
+            // batch naming a column this same migration adds (found building a fresh Azure database).
             migrationBuilder.Sql(@"
-                UPDATE [Matches]
+                EXEC(N'UPDATE [Matches]
                 SET [PeriodState] = CASE [Status]
                     WHEN 1 THEN 1
                     WHEN 2 THEN 2
                     WHEN 3 THEN 3
                     WHEN 4 THEN 3
                     ELSE 0
-                END;");
+                END;');");
 
             // Previously any send-off only abandoned the match once a side had nobody left.
             migrationBuilder.Sql(@"
-                UPDATE [Matches]
+                EXEC(N'UPDATE [Matches]
                 SET [MinPlayersPerSide] = 1
-                WHERE [Status] <> 0 AND [MinPlayersPerSide] IS NULL;");
+                WHERE [Status] <> 0 AND [MinPlayersPerSide] IS NULL;');");
         }
 
         /// <inheritdoc />

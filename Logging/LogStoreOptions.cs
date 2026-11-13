@@ -47,6 +47,5 @@ public sealed class LogStoreOptions
     public int RetryAfterSeconds { get; set; } = 30;
 
     /// <summary>Where entries go when the logs database can't take them: one JSON-lines file per day.</summary>
-    public string FallbackDirectory { get; set; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TournamentScheduler", "logs");
+    public string FallbackDirectory { get; set; } = Hosting.AppPaths.Under("logs");
 }

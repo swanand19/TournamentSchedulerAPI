@@ -12,7 +12,8 @@ using TournamentScheduler.Api.Services.Knockouts;
 using TournamentScheduler.Api.Services.Public;
 using TournamentScheduler.Api.Models.Public;
 using TournamentScheduler.Api.Realtime;
-using System.Text.Json.Serialization;
+using TournamentScheduler.Api.Hosting;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 
 // `dotnet run -- gateway-keys new|show|ensure` manages the gateway's keys and exits.
 if (GatewayKeyTool.TryRun(args, out var keyToolExitCode))
@@ -75,17 +76,34 @@ builder.Services.AddPublicRateLimit(builder.Configuration);
 // Live updates: a SignalR line that nudges the apps ("match 12 changed") so they fetch at once — see Realtime/LiveHub.cs.
 builder.Services.AddLiveUpdates();
 
-builder.Services.AddCors(options =>
+// Laptop (IIS) or Azure App Service: CORS list, forwarded headers, HSTS — see Hosting/HostingRegistration.cs.
+builder.Services.AddHosting(builder.Configuration);
+
+// Azure: requests, timings, dependencies and errors to Application Insights. Only when App Service supplies
+// the connection string, so the laptop and the tests send nothing anywhere.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
 {
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader().WithExposedHeaders(GatewayMiddleware.RequestIdHeader);
-    });
+    builder.Services.AddOpenTelemetry().UseAzureMonitor();
+    builder.Services.Configure<OpenTelemetry.Instrumentation.AspNetCore.AspNetCoreTraceInstrumentationOptions>(options =>
+        options.Filter = context => !context.Request.Path.StartsWithSegments(HostingRegistration.LivePath));
+}
+
+// A deploy or restart waits this long for requests in flight and for the log writer to empty its queue.
+builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(25));
+
+// A scoped service caught inside a singleton is a bug in every environment, not only in Development.
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateScopes = true;
+    options.ValidateOnBuild = true;
 });
 
 var app = builder.Build();
 
-// Before everything: each request gets the id every log row about it carries (X-Request-Id).
+// First: the caller's real address behind Azure's front end, and the health probe (answered before logging).
+app.UseHostingEdge();
+
+// Then each request gets the id every log row about it carries (X-Request-Id).
 app.UseRequestCorrelation();
 
 // Next, so a crash or an unmatched URL anywhere below still answers in the { status, data } envelope.
@@ -97,16 +115,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Before the gateway, so its answers — and the browser's preflight for POST /api/gateway — carry CORS headers.
-app.UseCors("AllowFrontend");
-
-// On by default. The IIS site that serves phones over plain HTTP on the home network turns it off
-// (Hosting__RedirectToHttps=false in its web.config), because a phone can't follow a redirect to
-// an HTTPS address the laptop has no trusted certificate for.
-if (app.Configuration.GetValue("Hosting:RedirectToHttps", true))
-{
-    app.UseHttpsRedirection();
-}
+// Before the gateway, so its answers — and the browser's preflight for POST /api/gateway — carry CORS
+// headers; then HSTS and the HTTPS redirect where they apply (off for the laptop's IIS site, whose phones
+// use plain HTTP, and on Azure, where App Service redirects first).
+app.UseHostingSecurity();
 
 // The gateway decrypts and rewrites the request to the action's own URL, so it runs before the
 // router; the rest run after it, once the action is known. The activity log goes first so refused

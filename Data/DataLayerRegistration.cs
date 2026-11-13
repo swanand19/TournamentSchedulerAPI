@@ -14,8 +14,14 @@ public static class DataLayerRegistration
     /// </summary>
     public static IServiceCollection AddDataLayer(this IServiceCollection services, IConfiguration configuration)
     {
+        var database = configuration.GetSection(DatabaseOptions.Section).Get<DatabaseOptions>() ?? new DatabaseOptions();
         services.AddDbContext<TournamentDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+            options.UseSqlServer(configuration.GetConnectionString("DefaultConnection"), sql =>
+            {
+                sql.CommandTimeout(database.CommandTimeoutSeconds);
+                if (database.RetryOnFailure)
+                    sql.EnableRetryOnFailure(database.MaxRetryCount, TimeSpan.FromSeconds(database.MaxRetryDelaySeconds), errorNumbersToAdd: null);
+            }));
 
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped(typeof(IDataService<>), typeof(DataService<>));

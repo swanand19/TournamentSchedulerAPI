@@ -19,11 +19,18 @@ public sealed class GatewayOptions
     /// the site folder on purpose, and shared by <c>dotnet run</c> and IIS so both answer to the
     /// same public key. Create one with <c>dotnet run -- gateway-keys new</c>.
     /// </summary>
-    public string KeyDirectory { get; set; } = System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TournamentScheduler", "keys");
+    public string KeyDirectory { get; set; } = Hosting.AppPaths.Under("keys");
 
     /// <summary>
-    /// The key the apps should be using. Null means the newest file in <see cref="KeyDirectory"/>.
+    /// Keys given as settings instead of files: key id → PKCS#8 PEM text. This is how Azure supplies them —
+    /// each is an App Service setting <c>Gateway__Keys__{keyId}</c> holding a Key Vault reference, so the
+    /// private key lives only in Key Vault and no file is ever written. Merged with the folder's keys; a
+    /// setting wins over a file with the same id.
+    /// </summary>
+    public Dictionary<string, string> Keys { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The key the apps should be using. Null means the newest key (folder or <see cref="Keys"/>).
     /// Every key in the folder is still accepted, which is what lets a key be rotated without
     /// breaking phones that have not been updated yet.
     /// </summary>

@@ -59,6 +59,30 @@ public sealed class RequestCorrelationMiddleware(RequestDelegate next, ILogger<R
         });
 
         using (logger.BeginScope(new Dictionary<string, object> { ["RequestUUID"] = log.RequestUUID }))
-            await next(context);
+        {
+            try
+            {
+                await next(context);
+            }
+            finally
+            {
+                TagTelemetry(log);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The same ids on the request Application Insights records (Azure), so a slow or failed request there
+    /// can be looked up in MBActivityLogs / ErrorLogs. Read at the end: the gateway and the session check
+    /// fill them in on the way through.
+    /// </summary>
+    private static void TagTelemetry(RequestLogContext log)
+    {
+        if (System.Diagnostics.Activity.Current is not { } activity) return;
+        activity.SetTag("app.requestUUID", log.RequestUUID.ToString());
+        if (log.ServiceRequestId != null) activity.SetTag("app.serviceRequestId", log.ServiceRequestId);
+        if (log.UserId != null) activity.SetTag("app.userId", log.UserId);
+        if (log.Channel != null) activity.SetTag("app.channel", log.Channel);
+        if (log.AppVersion != null) activity.SetTag("app.version", log.AppVersion);
     }
 }

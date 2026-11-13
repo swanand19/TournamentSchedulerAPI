@@ -35,10 +35,10 @@ public interface IGatewayKeyStore
 }
 
 /// <summary>
-/// Keys read from <see cref="GatewayOptions.KeyDirectory"/> at start-up: each <c>{keyId}.pem</c> is a
-/// PKCS#8 P-256 private key. Adding or retiring a key takes an API restart (Publish-IisSite.ps1 does
-/// one). A folder that is missing or empty is not an error — the API still starts, and the gateway
-/// answers 503 until a key is created.
+/// Keys read at start-up from <see cref="GatewayOptions.KeyDirectory"/> (each <c>{keyId}.pem</c> is a
+/// PKCS#8 P-256 private key — the laptop and IIS) and from <see cref="GatewayOptions.Keys"/> (settings
+/// filled from Key Vault — Azure). Adding or retiring a key takes an API restart. No key at all is not an
+/// error — the API still starts, and the gateway answers 503 until one is added.
 /// </summary>
 public sealed class FileGatewayKeyStore : IGatewayKeyStore, IDisposable
 {
@@ -48,10 +48,11 @@ public sealed class FileGatewayKeyStore : IGatewayKeyStore, IDisposable
     {
         var settings = options.Value;
         _keys = GatewayKeyFiles.Load(settings.KeyDirectory, logger);
+        GatewayKeyFiles.AddConfigured(_keys, settings.Keys, logger);
         Current = GatewayKeyFiles.PickCurrent(_keys, settings.CurrentKeyId);
 
         if (Current == null)
-            logger.LogWarning("No gateway key in {KeyDirectory}. Encrypted requests will be refused until one is created with 'dotnet run -- gateway-keys new'.", settings.KeyDirectory);
+            logger.LogWarning("No gateway key in {KeyDirectory} or Gateway:Keys. Encrypted requests will be refused until one is created with 'dotnet run -- gateway-keys new'.", settings.KeyDirectory);
         else
             logger.LogInformation("Gateway keys loaded: {KeyIds}; apps should use {CurrentKeyId}.", string.Join(", ", _keys.Keys), Current.Id);
     }
@@ -96,27 +97,60 @@ public static class GatewayKeyFiles
 
         foreach (var file in files)
         {
-            var id = Path.GetFileNameWithoutExtension(file);
+            string pem;
             try
             {
-                var key = ECDiffieHellman.Create();
-                key.ImportFromPem(File.ReadAllText(file));
-                if (key.KeySize != 256)
-                {
-                    key.Dispose();
-                    logger?.LogError("Gateway key {File} is not a P-256 key and was ignored.", file);
-                    continue;
-                }
-                keys[id] = new GatewayKey(id, key);
+                pem = File.ReadAllText(file);
             }
-            catch (Exception e) when (e is CryptographicException or ArgumentException or IOException or UnauthorizedAccessException)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 // One unreadable file must not take the others down with it.
                 logger?.LogError(e, "Gateway key {File} could not be read and was ignored.", file);
+                continue;
             }
+            if (FromPem(Path.GetFileNameWithoutExtension(file), pem, file, logger) is { } key)
+                keys[key.Id] = key;
         }
 
         return keys;
+    }
+
+    /// <summary>
+    /// Adds the keys given as settings (<see cref="GatewayOptions.Keys"/>) to those from the folder. A
+    /// setting replaces a file with the same id, so Azure's Key Vault copy is the one used.
+    /// </summary>
+    public static void AddConfigured(Dictionary<string, GatewayKey> keys, IReadOnlyDictionary<string, string> configured, ILogger? logger = null)
+    {
+        foreach (var (id, pem) in configured)
+        {
+            if (string.IsNullOrWhiteSpace(pem)) continue;
+            if (FromPem(id, pem, $"setting Gateway:Keys:{id}", logger) is not { } key) continue;
+            if (keys.Remove(id, out var replaced)) replaced.Dispose();
+            keys[id] = key;
+        }
+    }
+
+    /// <summary>A P-256 key from its PEM text, or null (logged) when it isn't one — never the text itself in the log.</summary>
+    private static GatewayKey? FromPem(string id, string pem, string source, ILogger? logger)
+    {
+        var key = ECDiffieHellman.Create();
+        try
+        {
+            key.ImportFromPem(pem);
+        }
+        catch (Exception e) when (e is CryptographicException or ArgumentException)
+        {
+            key.Dispose();
+            logger?.LogError(e, "Gateway key {Source} could not be read and was ignored.", source);
+            return null;
+        }
+        if (key.KeySize != 256)
+        {
+            key.Dispose();
+            logger?.LogError("Gateway key {Source} is not a P-256 key and was ignored.", source);
+            return null;
+        }
+        return new GatewayKey(id, key);
     }
 
     /// <summary>The configured key if it exists, else the newest (key ids sort by the date they were made).</summary>

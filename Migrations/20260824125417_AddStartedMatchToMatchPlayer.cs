@@ -24,8 +24,10 @@ namespace TournamentScheduler.Api.Migrations
             //   MatchEventType 3 = SubstitutionIn, whose RelatedPlayerId is the player coming on.
             // Not perfectly recoverable for a rolling-subs match where a starter was taken off: that
             // puts them back on the bench, leaving no trace of the original line-up.
+            // In EXEC(N'…') because the generated idempotent script is one batch, and SQL Server refuses a
+            // batch naming a column this same migration adds (found building a fresh Azure database).
             migrationBuilder.Sql(@"
-                UPDATE mp
+                EXEC(N'UPDATE mp
                 SET mp.[StartedMatch] = 1
                 FROM [MatchPlayers] mp
                 WHERE mp.[SquadStatus] IN (0, 3, 4)
@@ -33,7 +35,7 @@ namespace TournamentScheduler.Api.Migrations
                       SELECT 1 FROM [MatchEvents] e
                       WHERE e.[MatchId] = mp.[MatchId]
                         AND e.[EventType] = 3
-                        AND e.[RelatedPlayerId] = mp.[PlayerId]);");
+                        AND e.[RelatedPlayerId] = mp.[PlayerId]);');");
         }
 
         /// <inheritdoc />

@@ -96,7 +96,9 @@ public class AdminSignInService : ServiceBase, IAdminSignInService
 
         var now = _clock.GetUtcNow().UtcDateTime;
         var user = await _users.FirstOrDefaultAsync(u => u.EmailId == email && u.DeletedOn == null);
-        if (user == null || user.IsDisabled || (await _portal.ServicesForAsync(user.RoleId)).Count == 0)
+        // The store reviewers' fixed code is known to people outside, so that account never gets in here.
+        var reviewer = _options.ReviewAccount.IsFor(email, _options.OtpLength);
+        if (user == null || user.IsDisabled || reviewer || (await _portal.ServicesForAsync(user.RoleId)).Count == 0)
         {
             // The code was right, so it's spent; the answer is the same whatever the reason.
             challenge!.ConsumedAt = now;

@@ -86,7 +86,10 @@ public class OtpCodeService : ServiceBase, IOtpCodeService
         var waiting = await _challenges.ListAsync(c => c.Target == target && c.Purpose == purpose && c.ConsumedAt == null && c.ExpiresAt > now);
         foreach (var old in waiting) old.ExpiresAt = now;
 
-        var code = SessionTokens.NewCode(_options.OtpLength);
+        // The store reviewers' account gets its fixed code, and nothing is sent (see ReviewAccountOptions).
+        var review = purpose is OtpPurpose.SignIn or OtpPurpose.DeleteAccount
+                     && to.IsEmail && _options.ReviewAccount.IsFor(target, _options.OtpLength);
+        var code = review ? _options.ReviewAccount.Code! : SessionTokens.NewCode(_options.OtpLength);
         var challenge = new OtpChallenge
         {
             Purpose = purpose,
@@ -101,19 +104,26 @@ public class OtpCodeService : ServiceBase, IOtpCodeService
         _challenges.Add(challenge);
         await _unitOfWork.SaveChangesAsync();
 
-        try
+        if (review)
         {
-            await _sender.SendAsync(new OtpMessage(target, code, Math.Max(1, _options.OtpLifetimeSeconds / 60), purpose, to.Channel));
+            _logger.LogInformation("Store reviewer account: {Purpose} code set to the configured one, nothing sent.", purpose);
         }
-        catch (Exception e)
+        else
         {
-            // Not sent, so it mustn't count against the limits either.
-            if (purpose == OtpPurpose.DeleteAccount) _logger.LogError(e, "Couldn't send an account deletion code.");
-            else if (purpose == OtpPurpose.AddContact) _logger.LogError(e, "Couldn't send a code to add an email or number.");
-            else _logger.LogError(e, "Couldn't send a sign-in code.");
-            _challenges.Remove(challenge);
-            await _unitOfWork.SaveChangesAsync();
-            return Unavailable($"We couldn't send {to.CodeArrivesIn(_sms.PhoneMessage)} just now. Try again in a minute.");
+            try
+            {
+                await _sender.SendAsync(new OtpMessage(target, code, Math.Max(1, _options.OtpLifetimeSeconds / 60), purpose, to.Channel));
+            }
+            catch (Exception e)
+            {
+                // Not sent, so it mustn't count against the limits either.
+                if (purpose == OtpPurpose.DeleteAccount) _logger.LogError(e, "Couldn't send an account deletion code.");
+                else if (purpose == OtpPurpose.AddContact) _logger.LogError(e, "Couldn't send a code to add an email or number.");
+                else _logger.LogError(e, "Couldn't send a sign-in code.");
+                _challenges.Remove(challenge);
+                await _unitOfWork.SaveChangesAsync();
+                return Unavailable($"We couldn't send {to.CodeArrivesIn(_sms.PhoneMessage)} just now. Try again in a minute.");
+            }
         }
 
         return Success(new SendOtpResponse

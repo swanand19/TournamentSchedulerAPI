@@ -49,6 +49,21 @@ public class UnitOfWork : IUnitOfWork
         return new Transaction(await _db.Database.BeginTransactionAsync(cancellationToken));
     }
 
+    public Task ExecuteInTransactionAsync(Func<CancellationToken, Task> work, CancellationToken cancellationToken = default)
+    {
+        if (_db.Database.CurrentTransaction != null)
+            throw new InvalidOperationException("A transaction is already open for this request; commit or dispose it first.");
+
+        // The execution strategy replays the whole block after a transient failure; without retries it
+        // simply runs it once.
+        return _db.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+            await work(ct);
+            await tx.CommitAsync(ct);
+        }, cancellationToken);
+    }
+
     public Task<bool> CanConnectAsync() => _db.Database.CanConnectAsync();
 
     private sealed class Transaction(IDbContextTransaction inner) : IUnitOfWorkTransaction
