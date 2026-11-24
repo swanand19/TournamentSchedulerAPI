@@ -253,6 +253,50 @@ namespace TournamentScheduler.Api.Migrations
                     b.ToTable("RolePermissions", (string)null);
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.TeamAdmin", b =>
+                {
+                    b.Property<int>("TeamAdminId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TeamAdminId"));
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("TeamAdminId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TeamId", "UserId")
+                        .IsUnique();
+
+                    b.HasIndex("TournamentId", "UserId");
+
+                    b.ToTable("TeamAdmins", (string)null);
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.TournamentInvite", b =>
                 {
                     b.Property<int>("TournamentInviteId")
@@ -423,6 +467,11 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<DateTime?>("PhoneVerifiedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("PhotoId")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
 
@@ -534,6 +583,717 @@ namespace TournamentScheduler.Api.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("UserSessions", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.Auction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AuctioneerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BidSteps")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("ClockOn")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("FirstBidSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KeptPlayerPrice")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxSquad")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MinSquad")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NextBidSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NoTierBasePrice")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("OpenLotId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Order")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("Purse")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Round")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
+                    b.Property<string>("UnsoldPlan")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TournamentId")
+                        .IsUnique();
+
+                    b.ToTable("Auctions", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.AuctionBid", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Amount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("FromRoom")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsUndone")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("LotId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LotId", "Id");
+
+                    b.ToTable("AuctionBids", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.AuctionLot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Assigned")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("AuctionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BasePrice")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ByDraw")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ClosesAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("MovedFromTeamId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("OpenedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PausedMsLeft")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PoolPlayerId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Price")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Round")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SoldTeamId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "ClosesAt");
+
+                    b.HasIndex("AuctionId", "Round", "Order");
+
+                    b.ToTable("AuctionLots", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.AuctionTeam", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AuctionId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("BidderUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KeptPlayers")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuctionId", "TeamId")
+                        .IsUnique();
+
+                    b.HasIndex("TournamentId", "BidderUserId");
+
+                    b.ToTable("AuctionTeams", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.DrawPick", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Announced")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("DrawId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("LandsAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("MovedFromTeamId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("PickedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("PoolPlayerId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TierId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TournamentId");
+
+                    b.HasIndex("DrawId", "Order");
+
+                    b.HasIndex("DrawId", "PoolPlayerId")
+                        .IsUnique();
+
+                    b.ToTable("DrawPicks", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.PlayerPool", b =>
+                {
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsOpen")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("JoinCode")
+                        .HasMaxLength(7)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(7)");
+
+                    b.Property<string>("Method")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("TournamentId");
+
+                    b.HasIndex("JoinCode")
+                        .IsUnique()
+                        .HasFilter("[JoinCode] IS NOT NULL");
+
+                    b.ToTable("PlayerPools", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.PoolPlayer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CricketRole")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("EmailId")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool>("IsWithdrawn")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("JoinedByCode")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("PlayerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Position")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<int?>("TierId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmailId");
+
+                    b.HasIndex("PhoneNumber");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TournamentId", "UserId")
+                        .IsUnique()
+                        .HasFilter("[UserId] IS NOT NULL");
+
+                    b.ToTable("PoolPlayers", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.PoolTier", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BasePrice")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("MaxPerTeam")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TournamentId", "Order");
+
+                    b.ToTable("PoolTiers", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.TeamDraw", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AutoSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DrawerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("NextAutoAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TeamOrder")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Times")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TournamentId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "NextAutoAt");
+
+                    b.ToTable("TeamDraws", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.Club", b =>
+                {
+                    b.Property<int>("ClubId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ClubId"));
+
+                    b.Property<string>("Area")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("JoinCode")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LogoId")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<string>("PublicCode")
+                        .HasMaxLength(8)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<string>("Sport")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("ClubId");
+
+                    b.HasIndex("JoinCode")
+                        .IsUnique();
+
+                    b.HasIndex("PublicCode")
+                        .IsUnique()
+                        .HasFilter("[PublicCode] IS NOT NULL");
+
+                    b.ToTable("Clubs", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.ClubAdmin", b =>
+                {
+                    b.Property<int>("ClubAdminId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ClubAdminId"));
+
+                    b.Property<int>("ClubId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("ClubAdminId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ClubId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("ClubAdmins", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.ClubPlayer", b =>
+                {
+                    b.Property<int>("ClubPlayerId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ClubPlayerId"));
+
+                    b.Property<int>("ClubId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EmailId")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool>("IsCaptain")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("JerseyNumber")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Position")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("ClubPlayerId");
+
+                    b.HasIndex("EmailId");
+
+                    b.HasIndex("PhoneNumber");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ClubId", "UserId")
+                        .IsUnique()
+                        .HasFilter("[UserId] IS NOT NULL");
+
+                    b.ToTable("ClubPlayers", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.TournamentEntry", b =>
+                {
+                    b.Property<int>("TournamentEntryId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TournamentEntryId"));
+
+                    b.Property<int>("ClubId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DecidedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("RequestedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("TeamId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TeamName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("int");
+
+                    b.HasKey("TournamentEntryId");
+
+                    b.HasIndex("ClubId");
+
+                    b.HasIndex("TeamId");
+
+                    b.HasIndex("TournamentId", "ClubId")
+                        .IsUnique()
+                        .HasFilter("[Status] IN ('Waiting', 'Accepted')");
+
+                    b.ToTable("TournamentEntries", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.TournamentEntryPlayer", b =>
+                {
+                    b.Property<int>("TournamentEntryPlayerId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TournamentEntryPlayerId"));
+
+                    b.Property<int>("ClubPlayerId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TournamentEntryId")
+                        .HasColumnType("int");
+
+                    b.HasKey("TournamentEntryPlayerId");
+
+                    b.HasIndex("ClubPlayerId");
+
+                    b.HasIndex("TournamentEntryId", "ClubPlayerId")
+                        .IsUnique();
+
+                    b.ToTable("TournamentEntryPlayers", (string)null);
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketBall", b =>
@@ -1043,6 +1803,106 @@ namespace TournamentScheduler.Api.Migrations
                     b.ToTable("KnockoutFixtures");
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Leagues.League", b =>
+                {
+                    b.Property<int>("LeagueId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("LeagueId"));
+
+                    b.Property<string>("Area")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LogoId")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<string>("PublicCode")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<string>("ShortName")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
+                    b.Property<string>("Sport")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("LeagueId");
+
+                    b.HasIndex("PublicCode")
+                        .IsUnique();
+
+                    b.ToTable("Leagues", (string)null);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Leagues.LeagueOrganiser", b =>
+                {
+                    b.Property<int>("LeagueOrganiserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("LeagueOrganiserId"));
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CrdBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDisabled")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("LeagueId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Lmd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LmdBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("LeagueOrganiserId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("LeagueId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("LeagueOrganisers", (string)null);
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Match", b =>
                 {
                     b.Property<int>("Id")
@@ -1374,6 +2234,12 @@ namespace TournamentScheduler.Api.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<int?>("ClubId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ClubPlayerId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1407,7 +2273,13 @@ namespace TournamentScheduler.Api.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
+                    b.Property<int?>("LeagueId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("MatchId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ProfileUserId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ReadAt")
@@ -1416,6 +2288,9 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<string>("Sport")
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("TeamId")
+                        .HasColumnType("int");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -1479,6 +2354,24 @@ namespace TournamentScheduler.Api.Migrations
                     b.ToTable("PenaltyKicks");
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.People.UserFollow", b =>
+                {
+                    b.Property<int>("FollowerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("FollowedUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Crd")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("FollowerUserId", "FollowedUserId");
+
+                    b.HasIndex("FollowedUserId");
+
+                    b.ToTable("UserFollows", (string)null);
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Player", b =>
                 {
                     b.Property<int>("Id")
@@ -1487,12 +2380,18 @@ namespace TournamentScheduler.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ClubPlayerId")
+                        .HasColumnType("int");
+
                     b.Property<string>("EmailId")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
                     b.Property<int?>("JerseyNumber")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("LeftOn")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1515,6 +2414,8 @@ namespace TournamentScheduler.Api.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClubPlayerId");
 
                     b.HasIndex("EmailId");
 
@@ -1656,6 +2557,12 @@ namespace TournamentScheduler.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("BroughtBackFromTeamId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ClubId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1676,6 +2583,10 @@ namespace TournamentScheduler.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BroughtBackFromTeamId");
+
+                    b.HasIndex("ClubId");
+
                     b.HasIndex("JoinCode")
                         .IsUnique()
                         .HasFilter("[JoinCode] IS NOT NULL");
@@ -1694,6 +2605,11 @@ namespace TournamentScheduler.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BannerId")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("datetime2");
 
@@ -1711,11 +2627,27 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
 
+                    b.Property<bool>("EntriesOpen")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("EntryCode")
+                        .HasMaxLength(9)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(9)");
+
                     b.Property<bool>("IsPublic")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsStarted")
                         .HasColumnType("bit");
+
+                    b.Property<int?>("LeagueId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LogoId")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1745,6 +2677,12 @@ namespace TournamentScheduler.Api.Migrations
                         .HasDefaultValue("Asia/Kolkata");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EntryCode")
+                        .IsUnique()
+                        .HasFilter("[EntryCode] IS NOT NULL");
+
+                    b.HasIndex("LeagueId");
 
                     b.HasIndex("PublicCode")
                         .IsUnique()
@@ -1829,6 +2767,23 @@ namespace TournamentScheduler.Api.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.TeamAdmin", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Team", null)
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Accounts.TournamentInvite", b =>
                 {
                     b.HasOne("TournamentScheduler.Api.Models.Tournament", null)
@@ -1884,6 +2839,187 @@ namespace TournamentScheduler.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.Auction", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Tournament", null)
+                        .WithMany()
+                        .HasForeignKey("TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.AuctionBid", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Auctions.AuctionLot", null)
+                        .WithMany()
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.AuctionLot", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Auctions.Auction", null)
+                        .WithMany()
+                        .HasForeignKey("AuctionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.AuctionTeam", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Auctions.Auction", null)
+                        .WithMany()
+                        .HasForeignKey("AuctionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.DrawPick", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Auctions.TeamDraw", null)
+                        .WithMany()
+                        .HasForeignKey("DrawId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.PlayerPool", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Tournament", null)
+                        .WithOne()
+                        .HasForeignKey("TournamentScheduler.Api.Models.Auctions.PlayerPool", "TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.PoolPlayer", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Tournament", null)
+                        .WithMany()
+                        .HasForeignKey("TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.PoolTier", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Tournament", null)
+                        .WithMany()
+                        .HasForeignKey("TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Auctions.TeamDraw", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Tournament", null)
+                        .WithMany()
+                        .HasForeignKey("TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.ClubAdmin", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Clubs.Club", "Club")
+                        .WithMany("Admins")
+                        .HasForeignKey("ClubId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Club");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.ClubPlayer", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Clubs.Club", "Club")
+                        .WithMany("Players")
+                        .HasForeignKey("ClubId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.OwnsOne("TournamentScheduler.Api.Models.Clubs.ClubPlayerCricket", "Cricket", b1 =>
+                        {
+                            b1.Property<int>("ClubPlayerId")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("BattingOrderPreference")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("BattingStyle")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("BowlingArm")
+                                .HasColumnType("int");
+
+                            b1.Property<int?>("BowlingType")
+                                .HasColumnType("int");
+
+                            b1.Property<int>("PrimaryRole")
+                                .HasColumnType("int");
+
+                            b1.HasKey("ClubPlayerId");
+
+                            b1.ToTable("ClubPlayers");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ClubPlayerId");
+                        });
+
+                    b.Navigation("Club");
+
+                    b.Navigation("Cricket");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.TournamentEntry", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Clubs.Club", "Club")
+                        .WithMany()
+                        .HasForeignKey("ClubId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Tournament", null)
+                        .WithMany()
+                        .HasForeignKey("TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Club");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.TournamentEntryPlayer", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Clubs.TournamentEntry", "Entry")
+                        .WithMany("Players")
+                        .HasForeignKey("TournamentEntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Entry");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketBall", b =>
@@ -2173,6 +3309,25 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("Tournament");
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Leagues.LeagueOrganiser", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Leagues.League", "League")
+                        .WithMany("Organisers")
+                        .HasForeignKey("LeagueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("League");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Match", b =>
                 {
                     b.HasOne("TournamentScheduler.Api.Models.Team", "AwayTeam")
@@ -2272,8 +3427,31 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("Match");
                 });
 
+            modelBuilder.Entity("TournamentScheduler.Api.Models.People.UserFollow", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", "Followed")
+                        .WithMany()
+                        .HasForeignKey("FollowedUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TournamentScheduler.Api.Models.Accounts.User", "Follower")
+                        .WithMany()
+                        .HasForeignKey("FollowerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Followed");
+
+                    b.Navigation("Follower");
+                });
+
             modelBuilder.Entity("TournamentScheduler.Api.Models.Player", b =>
                 {
+                    b.HasOne("TournamentScheduler.Api.Models.Clubs.ClubPlayer", "ClubPlayer")
+                        .WithMany()
+                        .HasForeignKey("ClubPlayerId");
+
                     b.HasOne("TournamentScheduler.Api.Models.Team", "Team")
                         .WithMany("Players")
                         .HasForeignKey("TeamId")
@@ -2284,6 +3462,8 @@ namespace TournamentScheduler.Api.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ClubPlayer");
 
                     b.Navigation("Team");
 
@@ -2340,13 +3520,40 @@ namespace TournamentScheduler.Api.Migrations
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Team", b =>
                 {
+                    b.HasOne("TournamentScheduler.Api.Models.Clubs.Club", "Club")
+                        .WithMany()
+                        .HasForeignKey("ClubId");
+
                     b.HasOne("TournamentScheduler.Api.Models.Tournament", "Tournament")
                         .WithMany("Teams")
                         .HasForeignKey("TournamentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("Club");
+
                     b.Navigation("Tournament");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Tournament", b =>
+                {
+                    b.HasOne("TournamentScheduler.Api.Models.Leagues.League", "LeagueRow")
+                        .WithMany()
+                        .HasForeignKey("LeagueId");
+
+                    b.Navigation("LeagueRow");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.Club", b =>
+                {
+                    b.Navigation("Admins");
+
+                    b.Navigation("Players");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Clubs.TournamentEntry", b =>
+                {
+                    b.Navigation("Players");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Cricket.CricketInnings", b =>
@@ -2363,6 +3570,11 @@ namespace TournamentScheduler.Api.Migrations
                     b.Navigation("Innings");
 
                     b.Navigation("Squad");
+                });
+
+            modelBuilder.Entity("TournamentScheduler.Api.Models.Leagues.League", b =>
+                {
+                    b.Navigation("Organisers");
                 });
 
             modelBuilder.Entity("TournamentScheduler.Api.Models.Match", b =>

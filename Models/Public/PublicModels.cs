@@ -45,6 +45,19 @@ public class PublicShareDto
     public string? Url { get; set; }
 }
 
+/// <summary>
+/// A team's invite link (2026-11-23): its join code as an address to send on WhatsApp or anywhere else. Whoever opens it
+/// joins straight in, after signing in or up if they need to; the code typed on the Join screen still works as before.
+/// </summary>
+public class InviteLinkDto
+{
+    /// <summary>The whole link; null when the server doesn't know where the web app is, or when someone else shares it.</summary>
+    public string? Url { get; set; }
+
+    /// <summary>When it stops working, in words for the person sharing it (both apps show it as it is).</summary>
+    public string Note { get; set; } = string.Empty;
+}
+
 public class SetPublicRequest
 {
     public bool IsPublic { get; set; }
@@ -99,6 +112,10 @@ public class PublicTournamentDto
     public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public bool HasKnockouts { get; set; }
+
+    /// <summary>The tournament's logo and banner (signed links, HLD P-26) — the owners' pictures, never a person's.</summary>
+    public string? LogoUrl { get; set; }
+    public string? BannerUrl { get; set; }
 }
 
 /// <summary>A player as people without an account see them: the name and the top-level sport cards only (decided 2026-10-13).</summary>

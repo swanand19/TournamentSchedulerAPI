@@ -15,6 +15,9 @@ public class ProfileDto
     /// <summary>When the account was created (UTC).</summary>
     public DateTime MemberSince { get; set; }
 
+    /// <summary>Their profile photo: a signed link that expires (HLD P-26), relative to the API's address. Never on public pages.</summary>
+    public string? PhotoUrl { get; set; }
+
     /// <summary>Only on your own profile; null for anyone else's.</summary>
     public string? Email { get; set; }
     public string? Phone { get; set; }
@@ -24,6 +27,14 @@ public class ProfileDto
 
     /// <summary>Every sport the app supports, played or not, in a fixed order.</summary>
     public List<SportCardDto> Sports { get; set; } = new();
+
+    /// <summary>Followers, following, and how the viewer and this person follow each other (2026-11-23). Signed in only.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public People.FollowSummaryDto? Follow { get; set; }
+
+    /// <summary>Matches they're in now that the viewer may watch (2026-11-23). Signed in only; empty when none.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public List<People.PlayingNowDto>? PlayingNow { get; set; }
 }
 
 public class SportCardDto

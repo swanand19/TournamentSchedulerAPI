@@ -37,12 +37,30 @@ public class TournamentDbContext : DbContext
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<TournamentMember> TournamentMembers => Set<TournamentMember>();
+    public DbSet<TeamAdmin> TeamAdmins => Set<TeamAdmin>();
+    public DbSet<Models.Clubs.Club> Clubs => Set<Models.Clubs.Club>();
+    public DbSet<Models.Clubs.ClubAdmin> ClubAdmins => Set<Models.Clubs.ClubAdmin>();
+    public DbSet<Models.Clubs.ClubPlayer> ClubPlayers => Set<Models.Clubs.ClubPlayer>();
+    public DbSet<Models.Clubs.TournamentEntry> TournamentEntries => Set<Models.Clubs.TournamentEntry>();
+    public DbSet<Models.Clubs.TournamentEntryPlayer> TournamentEntryPlayers => Set<Models.Clubs.TournamentEntryPlayer>();
     public DbSet<TournamentInvite> TournamentInvites => Set<TournamentInvite>();
     public DbSet<Models.Public.TournamentFollow> TournamentFollows => Set<Models.Public.TournamentFollow>();
+    public DbSet<Models.People.UserFollow> UserFollows => Set<Models.People.UserFollow>();
+    public DbSet<Models.Leagues.League> Leagues => Set<Models.Leagues.League>();
+    public DbSet<Models.Leagues.LeagueOrganiser> LeagueOrganisers => Set<Models.Leagues.LeagueOrganiser>();
     public DbSet<UserCricketProfile> UserCricketProfiles => Set<UserCricketProfile>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
     public DbSet<AppStart> AppStarts => Set<AppStart>();
+    public DbSet<Models.Auctions.PlayerPool> PlayerPools => Set<Models.Auctions.PlayerPool>();
+    public DbSet<Models.Auctions.PoolTier> PoolTiers => Set<Models.Auctions.PoolTier>();
+    public DbSet<Models.Auctions.PoolPlayer> PoolPlayers => Set<Models.Auctions.PoolPlayer>();
+    public DbSet<Models.Auctions.Auction> Auctions => Set<Models.Auctions.Auction>();
+    public DbSet<Models.Auctions.AuctionTeam> AuctionTeams => Set<Models.Auctions.AuctionTeam>();
+    public DbSet<Models.Auctions.AuctionLot> AuctionLots => Set<Models.Auctions.AuctionLot>();
+    public DbSet<Models.Auctions.AuctionBid> AuctionBids => Set<Models.Auctions.AuctionBid>();
+    public DbSet<Models.Auctions.TeamDraw> TeamDraws => Set<Models.Auctions.TeamDraw>();
+    public DbSet<Models.Auctions.DrawPick> DrawPicks => Set<Models.Auctions.DrawPick>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -153,6 +171,10 @@ public class TournamentDbContext : DbContext
             .WithOne(p => p.Cricket)
             .HasForeignKey<PlayerCricketProfile>(p => p.PlayerId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Pictures (HLD P-26): file names in the pictures folder, "32 hex digits.jpg".
+        modelBuilder.Entity<Tournament>().Property(t => t.LogoId).HasMaxLength(40).IsUnicode(false);
+        modelBuilder.Entity<Tournament>().Property(t => t.BannerId).HasMaxLength(40).IsUnicode(false);
 
         // --- Cricket ---------------------------------------------------
         // Deliberately the same cascade shape as Match above: the tournament owns its fixtures,
@@ -302,6 +324,7 @@ public class TournamentDbContext : DbContext
             e.Property(u => u.EmailId).HasMaxLength(256);
             e.Property(u => u.PasswordHash).HasMaxLength(200).IsUnicode(false);
             e.Property(u => u.PhoneNumber).HasMaxLength(20);
+            e.Property(u => u.PhotoId).HasMaxLength(40).IsUnicode(false);
 
             // Unique only among accounts that have one: deleted accounts all have none.
             e.HasIndex(u => u.EmailId).IsUnique().HasFilter("[EmailId] IS NOT NULL");
@@ -393,6 +416,10 @@ public class TournamentDbContext : DbContext
             // Public live scores (6E): found by the code in the link.
             e.Property(t => t.PublicCode).HasMaxLength(8);
             e.HasIndex(t => t.PublicCode).IsUnique().HasFilter("[PublicCode] IS NOT NULL");
+
+            // Lasting teams entering with a code (2026-11-21, step 3).
+            e.Property(t => t.EntryCode).HasMaxLength(9).IsUnicode(false);
+            e.HasIndex(t => t.EntryCode).IsUnique().HasFilter("[EntryCode] IS NOT NULL");
         });
 
         modelBuilder.Entity<Models.Public.TournamentFollow>(e =>
@@ -406,6 +433,17 @@ public class TournamentDbContext : DbContext
             e.HasOne<User>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Restrict);
         });
 
+        // People following people (2026-11-23): one row a pair. Two links into Users, so neither cascades (SQL Server
+        // refuses two paths); account deletion removes a person's rows itself.
+        modelBuilder.Entity<Models.People.UserFollow>(e =>
+        {
+            e.ToTable("UserFollows");
+            e.HasKey(f => new { f.FollowerUserId, f.FollowedUserId });
+            e.HasIndex(f => f.FollowedUserId); // someone's followers, and the "is playing" news
+            e.HasOne(f => f.Follower).WithMany().HasForeignKey(f => f.FollowerUserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(f => f.Followed).WithMany().HasForeignKey(f => f.FollowedUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<TournamentMember>(e =>
         {
             e.ToTable("TournamentMembers");
@@ -417,6 +455,126 @@ public class TournamentDbContext : DbContext
             e.HasOne<Tournament>().WithMany().HasForeignKey(m => m.TournamentId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.User).WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Restrict);
         });
+
+        // Team admins (2026-11-20): run one team's squad. Removed with the team; the tournament id is a copy (no
+        // second cascade path into the table).
+        modelBuilder.Entity<TeamAdmin>(e =>
+        {
+            e.ToTable("TeamAdmins");
+            e.HasKey(a => a.TeamAdminId);
+            e.HasIndex(a => new { a.TeamId, a.UserId }).IsUnique();
+            e.HasIndex(a => new { a.TournamentId, a.UserId }); // the access check and "my tournaments"
+            e.HasIndex(a => a.UserId);
+
+            e.HasOne<Team>().WithMany().HasForeignKey(a => a.TeamId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(a => a.User).WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Lasting teams (2026-11-20, step 2 of docs/reusable-teams-plan.md): a club, its admins and players, outside any
+        // tournament. Its squads are Teams with ClubId; the links from tournament rows are NoAction (the cascade-paths
+        // rule), and ClubService clears them before a club or club player goes.
+        modelBuilder.Entity<Models.Clubs.Club>(e =>
+        {
+            e.ToTable("Clubs");
+            e.HasKey(c => c.ClubId);
+            e.Property(c => c.Name).HasMaxLength(Models.Clubs.Club.NameMax).IsRequired();
+            e.Property(c => c.Area).HasMaxLength(Models.Clubs.Club.AreaMax);
+            e.Property(c => c.Sport).HasConversion<string>().HasMaxLength(20);
+            e.Property(c => c.JoinCode).HasMaxLength(8).IsUnicode(false).IsRequired();
+            e.Property(c => c.LogoId).HasMaxLength(40).IsUnicode(false);
+            e.HasIndex(c => c.JoinCode).IsUnique();
+            e.Property(c => c.PublicCode).HasMaxLength(8).IsUnicode(false);
+            e.HasIndex(c => c.PublicCode).IsUnique().HasFilter("[PublicCode] IS NOT NULL");
+        });
+
+        modelBuilder.Entity<Models.Clubs.ClubAdmin>(e =>
+        {
+            e.ToTable("ClubAdmins");
+            e.HasKey(a => a.ClubAdminId);
+            e.HasIndex(a => new { a.ClubId, a.UserId }).IsUnique();
+            e.HasIndex(a => a.UserId); // "my teams" and the access check
+            e.HasOne(a => a.Club).WithMany(c => c.Admins).HasForeignKey(a => a.ClubId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(a => a.User).WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Models.Clubs.ClubPlayer>(e =>
+        {
+            e.ToTable("ClubPlayers");
+            e.HasKey(p => p.ClubPlayerId);
+            e.Property(p => p.Name).HasMaxLength(100).IsRequired();
+            e.Property(p => p.Position).HasMaxLength(50);
+            e.Property(p => p.EmailId).HasMaxLength(256);
+            e.Property(p => p.PhoneNumber).HasMaxLength(20);
+            // A person is in a club once (and in any number of clubs, C-2).
+            e.HasIndex(p => new { p.ClubId, p.UserId }).IsUnique().HasFilter("[UserId] IS NOT NULL");
+            e.HasIndex(p => p.UserId);
+            e.HasIndex(p => p.EmailId); // linked when that person signs up
+            e.HasIndex(p => p.PhoneNumber);
+            e.HasOne(p => p.Club).WithMany(c => c.Players).HasForeignKey(p => p.ClubId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(p => p.User).WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.OwnsOne(p => p.Cricket); // the same enum columns (numbers) as PlayerCricketProfiles
+        });
+
+        // Entries (2026-11-21, step 3). Tournament → Entry cascades; Club → Entry cascades too (another root, so no second
+        // path). The made team and the ticked club players are plain numbers, not links: Tournament and Club already reach
+        // those rows, and ClubSquads removes a club player's ticks before the club player goes.
+        modelBuilder.Entity<Models.Clubs.TournamentEntry>(e =>
+        {
+            e.ToTable("TournamentEntries");
+            e.HasKey(x => x.TournamentEntryId);
+            e.Property(x => x.TeamName).HasMaxLength(Models.Clubs.TournamentEntry.TeamNameMax).IsRequired();
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            // A club has one waiting-or-accepted entry per tournament.
+            e.HasIndex(x => new { x.TournamentId, x.ClubId }).IsUnique().HasFilter("[Status] IN ('Waiting', 'Accepted')");
+            e.HasIndex(x => x.ClubId);
+            e.HasOne<Tournament>().WithMany().HasForeignKey(x => x.TournamentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Club).WithMany().HasForeignKey(x => x.ClubId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.TeamId);
+        });
+
+        modelBuilder.Entity<Models.Clubs.TournamentEntryPlayer>(e =>
+        {
+            e.ToTable("TournamentEntryPlayers");
+            e.HasKey(x => x.TournamentEntryPlayerId);
+            e.HasIndex(x => new { x.TournamentEntryId, x.ClubPlayerId }).IsUnique();
+            e.HasIndex(x => x.ClubPlayerId);
+            e.HasOne(x => x.Entry).WithMany(x => x.Players).HasForeignKey(x => x.TournamentEntryId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Leagues and seasons (2026-11-24). A season is a tournament with LeagueId: NoAction (another root, the cascade-paths
+        // rule), and LeagueService clears the seasons' link before a league goes. Organisers go with their league.
+        modelBuilder.Entity<Models.Leagues.League>(e =>
+        {
+            e.ToTable("Leagues");
+            e.HasKey(l => l.LeagueId);
+            e.Property(l => l.Name).HasMaxLength(Models.Leagues.League.NameMax).IsRequired();
+            e.Property(l => l.ShortName).HasMaxLength(Models.Leagues.League.ShortNameMax).IsRequired();
+            e.Property(l => l.Area).HasMaxLength(Models.Leagues.League.AreaMax);
+            e.Property(l => l.Sport).HasConversion<string>().HasMaxLength(20);
+            e.Property(l => l.LogoId).HasMaxLength(40).IsUnicode(false);
+            e.Property(l => l.PublicCode).HasMaxLength(8).IsUnicode(false).IsRequired();
+            e.HasIndex(l => l.PublicCode).IsUnique();
+        });
+
+        modelBuilder.Entity<Models.Leagues.LeagueOrganiser>(e =>
+        {
+            e.ToTable("LeagueOrganisers");
+            e.HasKey(o => o.LeagueOrganiserId);
+            e.HasIndex(o => new { o.LeagueId, o.UserId }).IsUnique();
+            e.HasIndex(o => o.UserId); // "leagues I run"
+            e.HasOne(o => o.League).WithMany(l => l.Organisers).HasForeignKey(o => o.LeagueId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(o => o.User).WithMany().HasForeignKey(o => o.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Tournament>()
+            .HasOne(t => t.LeagueRow).WithMany().HasForeignKey(t => t.LeagueId).OnDelete(DeleteBehavior.ClientSetNull);
+        modelBuilder.Entity<Tournament>().HasIndex(t => t.LeagueId);
+        modelBuilder.Entity<Team>().HasIndex(t => t.BroughtBackFromTeamId);
+
+        modelBuilder.Entity<Team>()
+            .HasOne(t => t.Club).WithMany().HasForeignKey(t => t.ClubId).OnDelete(DeleteBehavior.ClientSetNull);
+        modelBuilder.Entity<Player>()
+            .HasOne(p => p.ClubPlayer).WithMany().HasForeignKey(p => p.ClubPlayerId).OnDelete(DeleteBehavior.ClientSetNull);
 
         // Invites for people without an account yet (phase 6C).
         modelBuilder.Entity<TournamentInvite>(e =>
@@ -510,11 +668,116 @@ public class TournamentDbContext : DbContext
             e.HasIndex(t => t.JoinCode).IsUnique().HasFilter("[JoinCode] IS NOT NULL");
         });
 
+        ConfigureAuctions(modelBuilder);
+
         modelBuilder.Entity<UserCricketProfile>(e =>
         {
             e.ToTable("UserCricketProfiles");
             e.HasKey(p => p.UserId);
             e.HasOne<User>().WithOne().HasForeignKey<UserCricketProfile>(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    /// <summary>
+    /// The player pool and the auction (2026-11-17). The tournament owns the pool, its tiers and the
+    /// auction; the auction owns its teams' rows and lots; a lot owns its bids. Links to teams, pool
+    /// players and squad places are plain ids, never foreign keys: each would be a second cascade path
+    /// from the tournament, which SQL Server rejects, and the services keep them true.
+    /// </summary>
+    private static void ConfigureAuctions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Models.Auctions.PlayerPool>(e =>
+        {
+            e.ToTable("PlayerPools");
+            e.HasKey(p => p.TournamentId);
+            e.Property(p => p.JoinCode).HasMaxLength(7).IsUnicode(false);
+            e.HasIndex(p => p.JoinCode).IsUnique().HasFilter("[JoinCode] IS NOT NULL");
+            e.Property(p => p.Method).HasConversion<string>().HasMaxLength(20);
+            e.HasOne<Tournament>().WithOne().HasForeignKey<Models.Auctions.PlayerPool>(p => p.TournamentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Models.Auctions.PoolTier>(e =>
+        {
+            e.ToTable("PoolTiers");
+            e.Property(t => t.Name).HasMaxLength(30).IsRequired();
+            e.HasIndex(t => new { t.TournamentId, t.Order });
+            e.HasOne<Tournament>().WithMany().HasForeignKey(t => t.TournamentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Models.Auctions.PoolPlayer>(e =>
+        {
+            e.ToTable("PoolPlayers");
+            e.Property(p => p.Name).HasMaxLength(100).IsRequired();
+            e.Property(p => p.EmailId).HasMaxLength(256);
+            e.Property(p => p.PhoneNumber).HasMaxLength(20);
+            e.Property(p => p.Position).HasMaxLength(40);
+            e.Property(p => p.CricketRole).HasConversion<string>().HasMaxLength(30);
+
+            // One pool place per person per tournament.
+            e.HasIndex(p => new { p.TournamentId, p.UserId }).IsUnique().HasFilter("[UserId] IS NOT NULL");
+            e.HasIndex(p => p.UserId);      // "my tournaments", who may watch
+            e.HasIndex(p => p.EmailId);     // linking when someone signs up
+            e.HasIndex(p => p.PhoneNumber);
+
+            e.HasOne<Tournament>().WithMany().HasForeignKey(p => p.TournamentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Models.Auctions.Auction>(e =>
+        {
+            e.ToTable("Auctions");
+            e.HasIndex(a => a.TournamentId).IsUnique();
+            e.Property(a => a.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(a => a.Order).HasConversion<string>().HasMaxLength(20);
+            e.Property(a => a.UnsoldPlan).HasConversion<string>().HasMaxLength(20);
+            e.Property(a => a.Unit).HasMaxLength(8).IsRequired();
+            e.Property(a => a.BidSteps).HasMaxLength(200).IsRequired();
+            e.HasOne<Tournament>().WithMany().HasForeignKey(a => a.TournamentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Models.Auctions.AuctionTeam>(e =>
+        {
+            e.ToTable("AuctionTeams");
+            e.HasIndex(t => new { t.AuctionId, t.TeamId }).IsUnique();
+            e.HasIndex(t => new { t.TournamentId, t.BidderUserId }); // who may watch
+            e.HasOne<Models.Auctions.Auction>().WithMany().HasForeignKey(t => t.AuctionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Models.Auctions.AuctionLot>(e =>
+        {
+            e.ToTable("AuctionLots");
+            e.Property(l => l.Status).HasConversion<string>().HasMaxLength(20);
+            e.HasIndex(l => new { l.AuctionId, l.Round, l.Order });
+            e.HasIndex(l => new { l.Status, l.ClosesAt }); // the clock job after a restart
+            e.HasOne<Models.Auctions.Auction>().WithMany().HasForeignKey(l => l.AuctionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Models.Auctions.AuctionBid>(e =>
+        {
+            e.ToTable("AuctionBids");
+            e.HasIndex(b => new { b.LotId, b.Id });
+            e.HasOne<Models.Auctions.AuctionLot>().WithMany().HasForeignKey(b => b.LotId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // The team draw (2026-11-17): one per tournament; its picks go with it.
+        modelBuilder.Entity<Models.Auctions.TeamDraw>(e =>
+        {
+            e.ToTable("TeamDraws");
+            e.HasIndex(d => d.TournamentId).IsUnique();
+            e.Property(d => d.Kind).HasConversion<string>().HasMaxLength(20);
+            e.Property(d => d.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(d => d.TeamOrder).HasMaxLength(1000).IsRequired();
+            e.HasIndex(d => new { d.Status, d.NextAutoAt }); // the clock job after a restart
+            e.HasOne<Tournament>().WithMany().HasForeignKey(d => d.TournamentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Models.Auctions.DrawPick>(e =>
+        {
+            e.ToTable("DrawPicks");
+            e.HasIndex(p => new { p.DrawId, p.PoolPlayerId }).IsUnique(); // drawn once
+            e.HasIndex(p => new { p.DrawId, p.Order });
+            e.HasIndex(p => p.TournamentId);
+            e.HasOne<Models.Auctions.TeamDraw>().WithMany().HasForeignKey(p => p.DrawId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

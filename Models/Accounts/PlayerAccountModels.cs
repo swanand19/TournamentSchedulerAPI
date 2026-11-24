@@ -62,6 +62,12 @@ public class JoinTeamRequest
 
     /// <summary>The place to claim; null for "I'm not listed — join as a new player".</summary>
     public int? PlayerId { get; set; }
+
+    /// <summary>
+    /// Opened from an invite link (2026-11-23): joins straight in as a new player, and being in this team already is
+    /// no error (the apps just open it).
+    /// </summary>
+    public bool Link { get; set; }
 }
 
 public class JoinTeamResult
@@ -72,6 +78,10 @@ public class JoinTeamResult
     public int TeamId { get; set; }
     public string TeamName { get; set; } = string.Empty;
     public int PlayerId { get; set; }
+
+    /// <summary>An invite link opened by someone already in the team: nothing changed.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AlreadyIn { get; set; }
 }
 
 // --- Adding a player by their email or number ----------------------------------

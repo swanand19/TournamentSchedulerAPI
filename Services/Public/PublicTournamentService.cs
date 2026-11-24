@@ -5,6 +5,7 @@ using TournamentScheduler.Api.Data.DataServices;
 using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Cricket;
 using TournamentScheduler.Api.Models.Public;
+using TournamentScheduler.Api.Services.Auctions;
 using TournamentScheduler.Api.Services.Cricket;
 using TournamentScheduler.Api.Services.Football;
 using TournamentScheduler.Api.Services.Knockouts;
@@ -25,6 +26,15 @@ public interface IPublicTournamentService
     Task<ServiceResult<JsonNode>> AwardsAsync(string code, int matchId);
     Task<ServiceResult<JsonNode>> StatsAsync(string code);
     Task<ServiceResult<JsonNode>> KnockoutAsync(string code);
+
+    /// <summary>A leaderboard row unfolded: the player's innings and spells, or goals and assists.</summary>
+    Task<ServiceResult<JsonNode>> PlayerLinesAsync(string code, int playerId);
+
+    /// <summary>The auction as everyone watching sees it, for the big screen in the hall (plan 4.7).</summary>
+    Task<ServiceResult<JsonNode>> AuctionAsync(string code);
+
+    /// <summary>The team draw as everyone watching sees it: the spinning name stays hidden until it lands.</summary>
+    Task<ServiceResult<JsonNode>> DrawAsync(string code);
     Task<ServiceResult<PublicPlayerDto>> PlayerAsync(string code, int playerId);
 }
 
@@ -56,15 +66,25 @@ public class PublicTournamentService : ServiceBase, IPublicTournamentService
     private readonly IWatchService _watch;
     private readonly IProfileService _profiles;
     private readonly IMemoryCache _cache;
+    private readonly IAuctionService _auctions;
+    private readonly IDrawService _draws;
     private readonly PublicOptions _options;
+
+    private readonly TournamentScheduler.Api.Pictures.PictureLinks _pictureLinks;
+    private readonly IPlayerMatchLinesService _playerLines;
 
     public PublicTournamentService(
         IDataService<Tournament> tournaments, IDataService<Match> matches, IDataService<CricketMatch> cricketMatches,
         IDataService<Player> players, ITournamentService tournamentService, IFootballMatchService football,
         ICricketScoringService cricket, ICricketMatchQueryService cricketQueries, IStatsService stats,
         ICricketStatsService cricketStats, IKnockoutService knockouts, IWatchService watch, IProfileService profiles,
-        IMemoryCache cache, IOptions<PublicOptions> options)
+        IMemoryCache cache, IOptions<PublicOptions> options, IAuctionService auctions, IDrawService draws,
+        TournamentScheduler.Api.Pictures.PictureLinks pictureLinks, IPlayerMatchLinesService playerLines)
     {
+        _playerLines = playerLines;
+        _pictureLinks = pictureLinks;
+        _auctions = auctions;
+        _draws = draws;
         _tournaments = tournaments;
         _matches = matches;
         _cricketMatches = cricketMatches;
@@ -95,7 +115,9 @@ public class PublicTournamentService : ServiceBase, IPublicTournamentService
             IsStarted = t.IsStarted,
             StartDate = t.StartDate,
             EndDate = t.EndDate,
-            HasKnockouts = await _knockouts.AnyAsync(t.Id)
+            HasKnockouts = await _knockouts.AnyAsync(t.Id),
+            LogoUrl = _pictureLinks.For(t.LogoId),
+            BannerUrl = _pictureLinks.For(t.BannerId)
         });
     }
 
@@ -140,10 +162,30 @@ public class PublicTournamentService : ServiceBase, IPublicTournamentService
         return stats == null ? NotFound(NotPublic) : Success(PublicShapes.Of(stats)!);
     }
 
+    public async Task<ServiceResult<JsonNode>> PlayerLinesAsync(string code, int playerId)
+    {
+        if (await FindAsync(code) is not { } t) return NotFound(NotPublic);
+        var lines = await _playerLines.GetAsync(t.Id, playerId);
+        return lines.Value is { } v ? Success(PublicShapes.Of(v)!) : NotFound(PlayerMatchLinesService.NotInTournament);
+    }
+
     public async Task<ServiceResult<JsonNode>> KnockoutAsync(string code)
     {
         if (await FindAsync(code) is not { } t) return NotFound(NotPublic);
         return Shape(Widen(await _knockouts.GetAsync(t.Id)));
+    }
+
+    // No cache: the TV counts a bid clock down to the second, and each answer is one small read.
+    public async Task<ServiceResult<JsonNode>> AuctionAsync(string code)
+    {
+        if (await FindAsync(code) is not { } t) return NotFound(NotPublic);
+        return Shape(Widen(await _auctions.GetAsync(t.Id)));
+    }
+
+    public async Task<ServiceResult<JsonNode>> DrawAsync(string code)
+    {
+        if (await FindAsync(code) is not { } t) return NotFound(NotPublic);
+        return Shape(Widen(await _draws.GetAsync(t.Id)));
     }
 
     /// <summary>A player of this tournament: their name and top-level sport cards, never the detailed career.</summary>

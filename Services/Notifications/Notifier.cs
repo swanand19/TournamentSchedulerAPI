@@ -11,9 +11,21 @@ using TournamentScheduler.Api.Services.Access;
 
 namespace TournamentScheduler.Api.Services.Notifications;
 
-/// <summary>Where tapping a notification goes: a tournament, or one of its matches.</summary>
-public readonly record struct NotificationLink(int TournamentId, Sport? Sport = null, int? MatchId = null)
+/// <summary>Where tapping a notification goes: a tournament, one of its matches or teams, or a lasting team (club).</summary>
+public readonly record struct NotificationLink(int? TournamentId, Sport? Sport = null, int? MatchId = null, int? TeamId = null, int? ClubId = null, int? ClubPlayerId = null,
+    int? ProfileUserId = null, int? LeagueId = null)
 {
+    /// <summary>A league's page (made one of its organisers).</summary>
+    public static NotificationLink ToLeague(int leagueId) => new(null, LeagueId: leagueId);
+
+    /// <summary>A person's profile (someone followed you).</summary>
+    public static NotificationLink ToProfile(int userId) => new(null, ProfileUserId: userId);
+
+    public static NotificationLink ToClub(int clubId) => new(null, ClubId: clubId);
+
+    /// <summary>A club player's news: opens the club's page with the live-tournaments question for them.</summary>
+    public static NotificationLink ToClubPlayer(int clubId, int clubPlayerId) => new(null, ClubId: clubId, ClubPlayerId: clubPlayerId);
+
     public static NotificationLink To(IScoredMatch match) =>
         new(match.TournamentId, match is CricketMatch ? Models.Sport.Cricket : Models.Sport.Football, match.Id);
 }
@@ -45,6 +57,12 @@ public interface INotifier
 
     /// <summary>Whether news with this dedupe key has gone out (to anyone).</summary>
     Task<bool> AlreadySentAsync(string dedupeKey);
+
+    /// <summary>
+    /// A tournament just completed: each team's admins are asked once whether to keep the team for other tournaments
+    /// (C-23), for teams that aren't kept already. Stages; the caller saves with the completion.
+    /// </summary>
+    Task AskToKeepTeamsAsync(int tournamentId, string tournamentName);
 }
 
 /// <summary>
@@ -59,6 +77,8 @@ public class Notifier(
     IDataService<User> users,
     IDataService<Match> matches,
     IDataService<CricketMatch> cricketMatches,
+    IDataService<Team> teams,
+    IDataService<TeamAdmin> teamAdmins,
     IUnitOfWork unitOfWork,
     ITournamentContext context,
     ICurrentUser currentUser,
@@ -84,6 +104,11 @@ public class Notifier(
             TournamentId = link?.TournamentId,
             Sport = link?.Sport,
             MatchId = link?.MatchId,
+            TeamId = link?.TeamId,
+            ClubId = link?.ClubId,
+            ClubPlayerId = link?.ClubPlayerId,
+            ProfileUserId = link?.ProfileUserId,
+            LeagueId = link?.LeagueId,
             DedupeKey = dedupeKey,
             CreatedAt = clock.GetUtcNow().UtcDateTime
         };
@@ -158,6 +183,27 @@ public class Notifier(
     }
 
     public Task<bool> AlreadySentAsync(string dedupeKey) => notifications.AnyAsync(n => n.DedupeKey == dedupeKey);
+
+    public async Task AskToKeepTeamsAsync(int tournamentId, string tournamentName)
+    {
+        var loose = await teams.QueryAsync(q => q
+            .Where(t => t.TournamentId == tournamentId && t.ClubId == null)
+            .Select(t => new { t.Id, t.Name }), tracking: false);
+        if (loose.Count == 0) return;
+        var ids = loose.Select(t => t.Id).ToList();
+        var admins = await teamAdmins.QueryAsync(q => q
+            .Where(a => ids.Contains(a.TeamId) && !a.IsDisabled && !a.User!.IsDisabled && a.User.DeletedOn == null)
+            .Select(a => new { a.TeamId, a.UserId }), tracking: false);
+        foreach (var team in loose)
+        {
+            var key = $"keep-team:{team.Id}";
+            if (await AlreadySentAsync(key)) continue;
+            foreach (var admin in admins.Where(a => a.TeamId == team.Id))
+                await NotifyAsync(admin.UserId, NotificationTemplateCode.KeepTeam,
+                    With(("TeamName", team.Name), ("TournamentName", tournamentName)),
+                    new NotificationLink(tournamentId, TeamId: team.Id), key);
+        }
+    }
 
     /// <summary>"Home v Away", for any scored match.</summary>
     public static string Describe(IScoredMatch match) => match switch

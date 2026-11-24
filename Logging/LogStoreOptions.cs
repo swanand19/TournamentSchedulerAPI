@@ -29,12 +29,14 @@ public sealed class LogStoreOptions
 
     /// <summary>
     /// JSON properties whose values are replaced with "***" wherever they appear, case-insensitive.
-    /// Credentials only — everything else is kept in plain text on purpose.
+    /// Credentials only (and picture data) — everything else is kept in plain text on purpose.
     /// </summary>
     public List<string> MaskedFields { get; set; } =
     [
         "password", "newPassword", "oldPassword", "confirmPassword", "pin", "mpin", "otp",
-        "token", "accessToken", "refreshToken", "sessionToken", "session", "secret", "apiKey", "authorization", "cvv"
+        "token", "accessToken", "refreshToken", "sessionToken", "session", "secret", "apiKey", "authorization", "cvv",
+        // Not a credential, but a picture (HLD P-26) is hundreds of KB of base64 nobody reads in a log.
+        "image"
     ];
 
     /// <summary>Entries waiting to be written. Beyond this, new entries are dropped and counted.</summary>

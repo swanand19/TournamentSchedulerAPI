@@ -6,8 +6,8 @@
 -- Safe to run again: every step checks __EFMigrationsHistory first. Later releases ship the same way: a
 -- script generated from the new migrations only (see README.md, "Database changes").
 --
--- The fresh database gets the two roles, the System user and the built-in message wording from the
--- migrations; permissions are filled in by the API at start-up. None of deploy/sql/01-14 are needed here:
+-- The fresh database gets the two roles and the System user from the migrations; the message wording is
+-- added by the API the first time it needs it, permissions at start-up. None of deploy/sql/01-24 are needed here:
 -- those upgraded the laptop's existing data.
 --
 -- Generated from the EF migrations - don't edit by hand; regenerate with
@@ -2397,6 +2397,1088 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261022060521_AddAppStarts', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE TABLE [Auctions] (
+        [Id] int NOT NULL IDENTITY,
+        [TournamentId] int NOT NULL,
+        [Status] nvarchar(20) NOT NULL,
+        [Unit] nvarchar(8) NOT NULL,
+        [Purse] int NOT NULL,
+        [MinSquad] int NOT NULL,
+        [MaxSquad] int NOT NULL,
+        [KeptPlayerPrice] int NOT NULL,
+        [NoTierBasePrice] int NOT NULL,
+        [BidSteps] nvarchar(200) NOT NULL,
+        [ClockOn] bit NOT NULL,
+        [FirstBidSeconds] int NOT NULL,
+        [NextBidSeconds] int NOT NULL,
+        [Order] nvarchar(20) NOT NULL,
+        [UnsoldPlan] nvarchar(20) NOT NULL,
+        [Round] int NOT NULL,
+        [AuctioneerUserId] int NULL,
+        [OpenLotId] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [StartedAt] datetime2 NULL,
+        [FinishedAt] datetime2 NULL,
+        [ConfirmedAt] datetime2 NULL,
+        CONSTRAINT [PK_Auctions] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_Auctions_Tournaments_TournamentId] FOREIGN KEY ([TournamentId]) REFERENCES [Tournaments] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE TABLE [PlayerPools] (
+        [TournamentId] int NOT NULL,
+        [JoinCode] varchar(7) NULL,
+        [IsOpen] bit NOT NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        CONSTRAINT [PK_PlayerPools] PRIMARY KEY ([TournamentId]),
+        CONSTRAINT [FK_PlayerPools_Tournaments_TournamentId] FOREIGN KEY ([TournamentId]) REFERENCES [Tournaments] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE TABLE [PoolPlayers] (
+        [Id] int NOT NULL IDENTITY,
+        [TournamentId] int NOT NULL,
+        [Name] nvarchar(100) NOT NULL,
+        [UserId] int NULL,
+        [EmailId] nvarchar(256) NULL,
+        [PhoneNumber] nvarchar(20) NULL,
+        [Position] nvarchar(40) NULL,
+        [CricketRole] nvarchar(30) NULL,
+        [TierId] int NULL,
+        [Order] int NOT NULL,
+        [JoinedByCode] bit NOT NULL,
+        [IsWithdrawn] bit NOT NULL,
+        [PlayerId] int NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [CreatedByUserId] int NOT NULL,
+        CONSTRAINT [PK_PoolPlayers] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_PoolPlayers_Tournaments_TournamentId] FOREIGN KEY ([TournamentId]) REFERENCES [Tournaments] ([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_PoolPlayers_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([UserId]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE TABLE [PoolTiers] (
+        [Id] int NOT NULL IDENTITY,
+        [TournamentId] int NOT NULL,
+        [Name] nvarchar(30) NOT NULL,
+        [Order] int NOT NULL,
+        [BasePrice] int NOT NULL,
+        [MaxPerTeam] int NULL,
+        CONSTRAINT [PK_PoolTiers] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_PoolTiers_Tournaments_TournamentId] FOREIGN KEY ([TournamentId]) REFERENCES [Tournaments] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE TABLE [AuctionLots] (
+        [Id] int NOT NULL IDENTITY,
+        [AuctionId] int NOT NULL,
+        [PoolPlayerId] int NOT NULL,
+        [Round] int NOT NULL,
+        [Order] int NOT NULL,
+        [BasePrice] int NOT NULL,
+        [Status] nvarchar(20) NOT NULL,
+        [OpenedAt] datetime2 NULL,
+        [ClosesAt] datetime2 NULL,
+        [PausedMsLeft] int NULL,
+        [ClosedAt] datetime2 NULL,
+        [SoldTeamId] int NULL,
+        [Price] int NULL,
+        [Assigned] bit NOT NULL,
+        CONSTRAINT [PK_AuctionLots] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_AuctionLots_Auctions_AuctionId] FOREIGN KEY ([AuctionId]) REFERENCES [Auctions] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE TABLE [AuctionTeams] (
+        [Id] int NOT NULL IDENTITY,
+        [AuctionId] int NOT NULL,
+        [TournamentId] int NOT NULL,
+        [TeamId] int NOT NULL,
+        [BidderUserId] int NULL,
+        [KeptPlayers] int NOT NULL,
+        CONSTRAINT [PK_AuctionTeams] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_AuctionTeams_Auctions_AuctionId] FOREIGN KEY ([AuctionId]) REFERENCES [Auctions] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE TABLE [AuctionBids] (
+        [Id] bigint NOT NULL IDENTITY,
+        [LotId] int NOT NULL,
+        [TeamId] int NOT NULL,
+        [Amount] int NOT NULL,
+        [ByUserId] int NOT NULL,
+        [FromRoom] bit NOT NULL,
+        [At] datetime2 NOT NULL,
+        [IsUndone] bit NOT NULL,
+        CONSTRAINT [PK_AuctionBids] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_AuctionBids_AuctionLots_LotId] FOREIGN KEY ([LotId]) REFERENCES [AuctionLots] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE INDEX [IX_AuctionBids_LotId_Id] ON [AuctionBids] ([LotId], [Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE INDEX [IX_AuctionLots_AuctionId_Round_Order] ON [AuctionLots] ([AuctionId], [Round], [Order]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE INDEX [IX_AuctionLots_Status_ClosesAt] ON [AuctionLots] ([Status], [ClosesAt]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_Auctions_TournamentId] ON [Auctions] ([TournamentId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_AuctionTeams_AuctionId_TeamId] ON [AuctionTeams] ([AuctionId], [TeamId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE INDEX [IX_AuctionTeams_TournamentId_BidderUserId] ON [AuctionTeams] ([TournamentId], [BidderUserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_PlayerPools_JoinCode] ON [PlayerPools] ([JoinCode]) WHERE [JoinCode] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE INDEX [IX_PoolPlayers_EmailId] ON [PoolPlayers] ([EmailId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE INDEX [IX_PoolPlayers_PhoneNumber] ON [PoolPlayers] ([PhoneNumber]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_PoolPlayers_TournamentId_UserId] ON [PoolPlayers] ([TournamentId], [UserId]) WHERE [UserId] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE INDEX [IX_PoolPlayers_UserId] ON [PoolPlayers] ([UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    CREATE INDEX [IX_PoolTiers_TournamentId_Order] ON [PoolTiers] ([TournamentId], [Order]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117064541_AddPlayerAuction'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261117064541_AddPlayerAuction', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    ALTER TABLE [PlayerPools] ADD [Method] nvarchar(20) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    ALTER TABLE [AuctionLots] ADD [MovedFromTeamId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    CREATE TABLE [TeamDraws] (
+        [Id] int NOT NULL IDENTITY,
+        [TournamentId] int NOT NULL,
+        [Kind] nvarchar(20) NOT NULL,
+        [Status] nvarchar(20) NOT NULL,
+        [TeamOrder] nvarchar(1000) NOT NULL,
+        [DrawerUserId] int NULL,
+        [AutoSeconds] int NULL,
+        [NextAutoAt] datetime2 NULL,
+        [Times] int NOT NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [StartedAt] datetime2 NULL,
+        [ConfirmedAt] datetime2 NULL,
+        CONSTRAINT [PK_TeamDraws] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_TeamDraws_Tournaments_TournamentId] FOREIGN KEY ([TournamentId]) REFERENCES [Tournaments] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    CREATE TABLE [DrawPicks] (
+        [Id] int NOT NULL IDENTITY,
+        [DrawId] int NOT NULL,
+        [TournamentId] int NOT NULL,
+        [PoolPlayerId] int NOT NULL,
+        [TeamId] int NOT NULL,
+        [Order] int NOT NULL,
+        [TierId] int NULL,
+        [PickedAt] datetime2 NOT NULL,
+        [LandsAt] datetime2 NOT NULL,
+        [Announced] bit NOT NULL,
+        [MovedFromTeamId] int NULL,
+        CONSTRAINT [PK_DrawPicks] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_DrawPicks_TeamDraws_DrawId] FOREIGN KEY ([DrawId]) REFERENCES [TeamDraws] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    CREATE INDEX [IX_DrawPicks_DrawId_Order] ON [DrawPicks] ([DrawId], [Order]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_DrawPicks_DrawId_PoolPlayerId] ON [DrawPicks] ([DrawId], [PoolPlayerId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    CREATE INDEX [IX_DrawPicks_TournamentId] ON [DrawPicks] ([TournamentId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    CREATE INDEX [IX_TeamDraws_Status_NextAutoAt] ON [TeamDraws] ([Status], [NextAutoAt]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_TeamDraws_TournamentId] ON [TeamDraws] ([TournamentId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117111819_AddTeamDraw'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261117111819_AddTeamDraw', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117121006_AddAuctionHistory'
+)
+BEGIN
+    ALTER TABLE [AuctionLots] ADD [ByDraw] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117121006_AddAuctionHistory'
+)
+BEGIN
+    ALTER TABLE [AuctionLots] ADD [CancelledAt] datetime2 NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261117121006_AddAuctionHistory'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261117121006_AddAuctionHistory', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118085306_RenameAppToKickCricket'
+)
+BEGIN
+    UPDATE [NotificationTemplates] SET [EmailSubject] = REPLACE([EmailSubject], N'Tournament Scheduler', N'KickCricket'), [EmailBody] = REPLACE([EmailBody], N'Tournament Scheduler', N'KickCricket'), [SmsBody] = REPLACE([SmsBody], N'Tournament Scheduler', N'KickCricket'), [NotificationTitle] = REPLACE([NotificationTitle], N'Tournament Scheduler', N'KickCricket'), [NotificationBody] = REPLACE([NotificationBody], N'Tournament Scheduler', N'KickCricket'), [PushTitle] = REPLACE([PushTitle], N'Tournament Scheduler', N'KickCricket'), [PushBody] = REPLACE([PushBody], N'Tournament Scheduler', N'KickCricket');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118085306_RenameAppToKickCricket'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261118085306_RenameAppToKickCricket', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120031238_AddPictures'
+)
+BEGIN
+    ALTER TABLE [Users] ADD [PhotoId] varchar(40) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120031238_AddPictures'
+)
+BEGIN
+    ALTER TABLE [Tournaments] ADD [BannerId] varchar(40) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120031238_AddPictures'
+)
+BEGIN
+    ALTER TABLE [Tournaments] ADD [LogoId] varchar(40) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120031238_AddPictures'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261120031238_AddPictures', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120121343_AddTeamAdmins'
+)
+BEGIN
+    ALTER TABLE [Players] ADD [LeftOn] datetime2 NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120121343_AddTeamAdmins'
+)
+BEGIN
+    CREATE TABLE [TeamAdmins] (
+        [TeamAdminId] int NOT NULL IDENTITY,
+        [TeamId] int NOT NULL,
+        [TournamentId] int NOT NULL,
+        [UserId] int NOT NULL,
+        [Crd] datetime2 NOT NULL,
+        [CrdBy] int NOT NULL,
+        [Lmd] datetime2 NOT NULL,
+        [LmdBy] int NOT NULL,
+        [IsDisabled] bit NOT NULL,
+        CONSTRAINT [PK_TeamAdmins] PRIMARY KEY ([TeamAdminId]),
+        CONSTRAINT [FK_TeamAdmins_Teams_TeamId] FOREIGN KEY ([TeamId]) REFERENCES [Teams] ([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_TeamAdmins_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([UserId]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120121343_AddTeamAdmins'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_TeamAdmins_TeamId_UserId] ON [TeamAdmins] ([TeamId], [UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120121343_AddTeamAdmins'
+)
+BEGIN
+    CREATE INDEX [IX_TeamAdmins_TournamentId_UserId] ON [TeamAdmins] ([TournamentId], [UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120121343_AddTeamAdmins'
+)
+BEGIN
+    CREATE INDEX [IX_TeamAdmins_UserId] ON [TeamAdmins] ([UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120121343_AddTeamAdmins'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261120121343_AddTeamAdmins', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    ALTER TABLE [Teams] ADD [ClubId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    ALTER TABLE [Players] ADD [ClubPlayerId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    ALTER TABLE [Notifications] ADD [ClubId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    ALTER TABLE [Notifications] ADD [TeamId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE TABLE [Clubs] (
+        [ClubId] int NOT NULL IDENTITY,
+        [Name] nvarchar(60) NOT NULL,
+        [Sport] nvarchar(20) NOT NULL,
+        [Area] nvarchar(60) NULL,
+        [JoinCode] varchar(8) NOT NULL,
+        [LogoId] varchar(40) NULL,
+        [Crd] datetime2 NOT NULL,
+        [CrdBy] int NOT NULL,
+        [Lmd] datetime2 NOT NULL,
+        [LmdBy] int NOT NULL,
+        [IsDisabled] bit NOT NULL,
+        CONSTRAINT [PK_Clubs] PRIMARY KEY ([ClubId])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE TABLE [ClubAdmins] (
+        [ClubAdminId] int NOT NULL IDENTITY,
+        [ClubId] int NOT NULL,
+        [UserId] int NOT NULL,
+        [Crd] datetime2 NOT NULL,
+        [CrdBy] int NOT NULL,
+        [Lmd] datetime2 NOT NULL,
+        [LmdBy] int NOT NULL,
+        [IsDisabled] bit NOT NULL,
+        CONSTRAINT [PK_ClubAdmins] PRIMARY KEY ([ClubAdminId]),
+        CONSTRAINT [FK_ClubAdmins_Clubs_ClubId] FOREIGN KEY ([ClubId]) REFERENCES [Clubs] ([ClubId]) ON DELETE CASCADE,
+        CONSTRAINT [FK_ClubAdmins_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([UserId]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE TABLE [ClubPlayers] (
+        [ClubPlayerId] int NOT NULL IDENTITY,
+        [ClubId] int NOT NULL,
+        [Name] nvarchar(100) NOT NULL,
+        [JerseyNumber] int NULL,
+        [Position] nvarchar(50) NULL,
+        [IsCaptain] bit NOT NULL,
+        [UserId] int NULL,
+        [EmailId] nvarchar(256) NULL,
+        [PhoneNumber] nvarchar(20) NULL,
+        [Cricket_PrimaryRole] int NULL,
+        [Cricket_BattingStyle] int NULL,
+        [Cricket_BowlingArm] int NULL,
+        [Cricket_BowlingType] int NULL,
+        [Cricket_BattingOrderPreference] int NULL,
+        [Crd] datetime2 NOT NULL,
+        [CrdBy] int NOT NULL,
+        [Lmd] datetime2 NOT NULL,
+        [LmdBy] int NOT NULL,
+        [IsDisabled] bit NOT NULL,
+        CONSTRAINT [PK_ClubPlayers] PRIMARY KEY ([ClubPlayerId]),
+        CONSTRAINT [FK_ClubPlayers_Clubs_ClubId] FOREIGN KEY ([ClubId]) REFERENCES [Clubs] ([ClubId]) ON DELETE CASCADE,
+        CONSTRAINT [FK_ClubPlayers_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([UserId]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE INDEX [IX_Teams_ClubId] ON [Teams] ([ClubId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE INDEX [IX_Players_ClubPlayerId] ON [Players] ([ClubPlayerId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_ClubAdmins_ClubId_UserId] ON [ClubAdmins] ([ClubId], [UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE INDEX [IX_ClubAdmins_UserId] ON [ClubAdmins] ([UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_ClubPlayers_ClubId_UserId] ON [ClubPlayers] ([ClubId], [UserId]) WHERE [UserId] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE INDEX [IX_ClubPlayers_EmailId] ON [ClubPlayers] ([EmailId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE INDEX [IX_ClubPlayers_PhoneNumber] ON [ClubPlayers] ([PhoneNumber]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE INDEX [IX_ClubPlayers_UserId] ON [ClubPlayers] ([UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_Clubs_JoinCode] ON [Clubs] ([JoinCode]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    ALTER TABLE [Players] ADD CONSTRAINT [FK_Players_ClubPlayers_ClubPlayerId] FOREIGN KEY ([ClubPlayerId]) REFERENCES [ClubPlayers] ([ClubPlayerId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    ALTER TABLE [Teams] ADD CONSTRAINT [FK_Teams_Clubs_ClubId] FOREIGN KEY ([ClubId]) REFERENCES [Clubs] ([ClubId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120172036_AddClubs'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261120172036_AddClubs', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    ALTER TABLE [Tournaments] ADD [EntriesOpen] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    ALTER TABLE [Tournaments] ADD [EntryCode] varchar(9) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    ALTER TABLE [Notifications] ADD [ClubPlayerId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    ALTER TABLE [Clubs] ADD [PublicCode] varchar(8) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    CREATE TABLE [TournamentEntries] (
+        [TournamentEntryId] int NOT NULL IDENTITY,
+        [TournamentId] int NOT NULL,
+        [ClubId] int NOT NULL,
+        [TeamName] nvarchar(100) NOT NULL,
+        [Status] nvarchar(20) NOT NULL,
+        [RequestedByUserId] int NOT NULL,
+        [RequestedAt] datetime2 NOT NULL,
+        [DecidedByUserId] int NULL,
+        [DecidedAt] datetime2 NULL,
+        [TeamId] int NULL,
+        CONSTRAINT [PK_TournamentEntries] PRIMARY KEY ([TournamentEntryId]),
+        CONSTRAINT [FK_TournamentEntries_Clubs_ClubId] FOREIGN KEY ([ClubId]) REFERENCES [Clubs] ([ClubId]) ON DELETE CASCADE,
+        CONSTRAINT [FK_TournamentEntries_Tournaments_TournamentId] FOREIGN KEY ([TournamentId]) REFERENCES [Tournaments] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    CREATE TABLE [TournamentEntryPlayers] (
+        [TournamentEntryPlayerId] int NOT NULL IDENTITY,
+        [TournamentEntryId] int NOT NULL,
+        [ClubPlayerId] int NOT NULL,
+        CONSTRAINT [PK_TournamentEntryPlayers] PRIMARY KEY ([TournamentEntryPlayerId]),
+        CONSTRAINT [FK_TournamentEntryPlayers_TournamentEntries_TournamentEntryId] FOREIGN KEY ([TournamentEntryId]) REFERENCES [TournamentEntries] ([TournamentEntryId]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_Tournaments_EntryCode] ON [Tournaments] ([EntryCode]) WHERE [EntryCode] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_Clubs_PublicCode] ON [Clubs] ([PublicCode]) WHERE [PublicCode] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    CREATE INDEX [IX_TournamentEntries_ClubId] ON [TournamentEntries] ([ClubId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    CREATE INDEX [IX_TournamentEntries_TeamId] ON [TournamentEntries] ([TeamId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_TournamentEntries_TournamentId_ClubId] ON [TournamentEntries] ([TournamentId], [ClubId]) WHERE [Status] IN (''Waiting'', ''Accepted'')');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    CREATE INDEX [IX_TournamentEntryPlayers_ClubPlayerId] ON [TournamentEntryPlayers] ([ClubPlayerId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_TournamentEntryPlayers_TournamentEntryId_ClubPlayerId] ON [TournamentEntryPlayers] ([TournamentEntryId], [ClubPlayerId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261121182754_AddClubEntries'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261121182754_AddClubEntries', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261123110634_AddFollows'
+)
+BEGIN
+    ALTER TABLE [Notifications] ADD [ProfileUserId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261123110634_AddFollows'
+)
+BEGIN
+    CREATE TABLE [UserFollows] (
+        [FollowerUserId] int NOT NULL,
+        [FollowedUserId] int NOT NULL,
+        [Crd] datetime2 NOT NULL,
+        CONSTRAINT [PK_UserFollows] PRIMARY KEY ([FollowerUserId], [FollowedUserId]),
+        CONSTRAINT [FK_UserFollows_Users_FollowedUserId] FOREIGN KEY ([FollowedUserId]) REFERENCES [Users] ([UserId]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_UserFollows_Users_FollowerUserId] FOREIGN KEY ([FollowerUserId]) REFERENCES [Users] ([UserId]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261123110634_AddFollows'
+)
+BEGIN
+    CREATE INDEX [IX_UserFollows_FollowedUserId] ON [UserFollows] ([FollowedUserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261123110634_AddFollows'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261123110634_AddFollows', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261123174025_EveryTournamentPublic'
+)
+BEGIN
+    EXEC(N'
+    DECLARE @alphabet varchar(32) = ''ABCDEFGHJKLMNPQRSTUVWXYZ23456789'';
+    DECLARE @id int, @code varchar(8), @i int;
+    UPDATE [Tournaments] SET [IsPublic] = CAST(1 AS bit) WHERE [IsPublic] = CAST(0 AS bit);
+    WHILE 1 = 1
+    BEGIN
+        SET @id = NULL;
+        SELECT TOP 1 @id = [Id] FROM [Tournaments] WHERE [PublicCode] IS NULL ORDER BY [Id];
+        IF @id IS NULL BREAK;
+        SET @code = '''';
+        SET @i = 0;
+        WHILE @i < 8
+        BEGIN
+            SET @code = @code + SUBSTRING(@alphabet, 1 + CAST(CRYPT_GEN_RANDOM(1) AS int) % 32, 1);
+            SET @i = @i + 1;
+        END;
+        IF NOT EXISTS (SELECT 1 FROM [Tournaments] WHERE [PublicCode] = @code)
+            UPDATE [Tournaments] SET [PublicCode] = @code WHERE [Id] = @id;
+    END;
+    ')
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261123174025_EveryTournamentPublic'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261123174025_EveryTournamentPublic', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    ALTER TABLE [Tournaments] ADD [LeagueId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    ALTER TABLE [Teams] ADD [BroughtBackFromTeamId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    ALTER TABLE [Notifications] ADD [LeagueId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    CREATE TABLE [Leagues] (
+        [LeagueId] int NOT NULL IDENTITY,
+        [Name] nvarchar(60) NOT NULL,
+        [ShortName] nvarchar(8) NOT NULL,
+        [Sport] nvarchar(20) NOT NULL,
+        [Area] nvarchar(60) NULL,
+        [LogoId] varchar(40) NULL,
+        [PublicCode] varchar(8) NOT NULL,
+        [Crd] datetime2 NOT NULL,
+        [CrdBy] int NOT NULL,
+        [Lmd] datetime2 NOT NULL,
+        [LmdBy] int NOT NULL,
+        [IsDisabled] bit NOT NULL,
+        CONSTRAINT [PK_Leagues] PRIMARY KEY ([LeagueId])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    CREATE TABLE [LeagueOrganisers] (
+        [LeagueOrganiserId] int NOT NULL IDENTITY,
+        [LeagueId] int NOT NULL,
+        [UserId] int NOT NULL,
+        [Crd] datetime2 NOT NULL,
+        [CrdBy] int NOT NULL,
+        [Lmd] datetime2 NOT NULL,
+        [LmdBy] int NOT NULL,
+        [IsDisabled] bit NOT NULL,
+        CONSTRAINT [PK_LeagueOrganisers] PRIMARY KEY ([LeagueOrganiserId]),
+        CONSTRAINT [FK_LeagueOrganisers_Leagues_LeagueId] FOREIGN KEY ([LeagueId]) REFERENCES [Leagues] ([LeagueId]) ON DELETE CASCADE,
+        CONSTRAINT [FK_LeagueOrganisers_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([UserId]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    CREATE INDEX [IX_Tournaments_LeagueId] ON [Tournaments] ([LeagueId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    CREATE INDEX [IX_Teams_BroughtBackFromTeamId] ON [Teams] ([BroughtBackFromTeamId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_LeagueOrganisers_LeagueId_UserId] ON [LeagueOrganisers] ([LeagueId], [UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    CREATE INDEX [IX_LeagueOrganisers_UserId] ON [LeagueOrganisers] ([UserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_Leagues_PublicCode] ON [Leagues] ([PublicCode]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    ALTER TABLE [Tournaments] ADD CONSTRAINT [FK_Tournaments_Leagues_LeagueId] FOREIGN KEY ([LeagueId]) REFERENCES [Leagues] ([LeagueId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124060334_AddLeagues'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261124060334_AddLeagues', N'10.0.9');
 END;
 
 COMMIT;

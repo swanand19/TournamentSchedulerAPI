@@ -128,6 +128,9 @@ public class CreateTournamentRequest
     /// </summary>
     public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
+
+    /// <summary>The league it's the next season of ("Start Season 4"), when its organiser chose one; null for a one-off.</summary>
+    public int? LeagueId { get; set; }
 }
 
 /// <summary>An owner's edit of the tournament itself, while it isn't completed.</summary>

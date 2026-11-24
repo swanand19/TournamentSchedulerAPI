@@ -6,6 +6,7 @@ using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
 using TournamentScheduler.Api.Models.Notifications;
 using TournamentScheduler.Api.Services.Access;
+using TournamentScheduler.Api.Pictures;
 
 namespace TournamentScheduler.Api.Services.Accounts;
 
@@ -43,11 +44,17 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
     private readonly IDataService<CricketMatch> _cricketMatches;
     private readonly IDataService<Notification> _notifications;
     private readonly IDataService<Models.Public.TournamentFollow> _follows;
+    private readonly IDataService<TeamAdmin> _teamAdmins;
+    private readonly Clubs.IClubService _clubs;
+    private readonly Leagues.ILeagueService _leagues;
+    private readonly People.IFollowService _peopleFollows;
     private readonly IOtpCodeService _codes;
     private readonly IPlayerLinkService _links;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly TimeProvider _clock;
+
+    private readonly IPictureStore _pictureStore;
 
     public AccountDeletionService(
         IDataService<User> users,
@@ -61,12 +68,18 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
         IDataService<CricketMatch> cricketMatches,
         IDataService<Notification> notifications,
         IDataService<Models.Public.TournamentFollow> follows,
+        IDataService<TeamAdmin> teamAdmins,
+        Clubs.IClubService clubs,
+        Leagues.ILeagueService leagues,
+        People.IFollowService peopleFollows,
         IOtpCodeService codes,
         IPlayerLinkService links,
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
-        TimeProvider clock)
+        TimeProvider clock,
+        IPictureStore pictureStore)
     {
+        _pictureStore = pictureStore;
         _users = users;
         _sessions = sessions;
         _challenges = challenges;
@@ -78,6 +91,10 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
         _cricketMatches = cricketMatches;
         _notifications = notifications;
         _follows = follows;
+        _teamAdmins = teamAdmins;
+        _clubs = clubs;
+        _leagues = leagues;
+        _peopleFollows = peopleFollows;
         _codes = codes;
         _links = links;
         _unitOfWork = unitOfWork;
@@ -129,8 +146,13 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
         var deleted = plan.Delete.Select(t => t.Id).ToList();
 
         // Tournaments: deleted (cascading to everything in them), or handed to another owner.
+        var pictures = new List<string?> { user.PhotoId };
         foreach (var gone in await _tournaments.ListAsync(t => deleted.Contains(t.Id)))
+        {
+            pictures.Add(gone.LogoId);
+            pictures.Add(gone.BannerId);
             _tournaments.Remove(gone);
+        }
         var handOver = plan.HandOver.ToDictionary(h => h.Id, h => h.NewCreatorId);
         var handOverIds = handOver.Keys.ToList();
         foreach (var kept in await _tournaments.ListAsync(t => handOverIds.Contains(t.Id)))
@@ -165,6 +187,10 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
         _sessions.RemoveRange(await _sessions.ListAsync(s => s.UserId == me));
         _notifications.RemoveRange(await _notifications.ListAsync(n => n.UserId == me));
         _follows.RemoveRange(await _follows.ListAsync(f => f.UserId == me));
+        _teamAdmins.RemoveRange(await _teamAdmins.ListAsync(a => a.UserId == me));
+        await _clubs.ForgetUserAsync(me); // lasting teams: places become names, admin seats handed on
+        await _leagues.ForgetUserAsync(me); // leagues: organiser seats go, the last one handed on
+        await _peopleFollows.ForgetAsync(me); // nobody follows a deleted account, and it follows nobody
         _challenges.RemoveRange(await _challenges.ListAsync(c => c.Target == email || c.Target == phone));
         if (await _profiles.GetByIdAsync(me) is { } profile) _profiles.Remove(profile);
 
@@ -173,9 +199,12 @@ public class AccountDeletionService : ServiceBase, IAccountDeletionService
         user.PhoneNumber = null;
         user.EmailVerifiedAt = user.PhoneVerifiedAt = null;
         user.DeletedOn = now;
+        user.PhotoId = null;
         user.Modified(now, me);
 
         await _unitOfWork.SaveChangesAsync();
+        // Their photo and the deleted tournaments' pictures go with them (HLD P-26).
+        foreach (var picture in pictures) _pictureStore.Delete(picture);
         return Ok(new { deleted = true, tournamentsDeleted = deleted.Count });
     }
 

@@ -20,11 +20,11 @@ public class NotificationsController : ApiController
 
     public NotificationsController(INotificationService notifications) => _notifications = notifications;
 
-    // GET api/notifications?before=123&take=30
+    // GET api/notifications?before=123&take=30&category=Social — category narrows it to one chip (2026-11-23)
     [HttpGet]
     [ServiceRequestId("NOTIFICATION_LIST")]
-    public async Task<ActionResult<ApiResponse<NotificationPageDto>>> List([FromQuery] long? before, [FromQuery] int? take) =>
-        Respond(await _notifications.ListAsync(before, take));
+    public async Task<ActionResult<ApiResponse<NotificationPageDto>>> List([FromQuery] long? before, [FromQuery] int? take, [FromQuery] string? category) =>
+        Respond(await _notifications.ListAsync(before, take, category));
 
     // GET api/notifications/unread — the bell's count, asked for while Home is on screen
     [HttpGet("unread")]

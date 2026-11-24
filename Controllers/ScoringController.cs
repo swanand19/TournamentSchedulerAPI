@@ -25,6 +25,13 @@ public class ScoringController : ApiController
         _lock = scoringLock;
     }
 
+    // POST api/scoring/cricket/5/claim — the apps' scoring screens, on opening: yours if nobody is scoring it, otherwise nothing changes
+    [HttpPost("claim")]
+    [ServiceRequestId("SCORING_CLAIM")]
+    [TournamentAccess(TournamentPermission.Score, From = TournamentScope.SportMatch, IgnoresScorerLock = true)]
+    public async Task<ActionResult<ApiResponse<ScoringDto>>> ClaimScoring(string sport, int matchId) =>
+        Respond(await _lock.ClaimAsync());
+
     // POST api/scoring/cricket/5/request — ask the active scorer to hand over (yours at once if nobody is scoring, or they've gone quiet)
     [HttpPost("request")]
     [ServiceRequestId("SCORING_REQUEST")]

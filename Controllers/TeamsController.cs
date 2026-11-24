@@ -11,6 +11,8 @@ namespace TournamentScheduler.Api.Controllers;
 
 // Route parameter names are part of the gateway contract (the apps fill them by name):
 // the tournament is {id}, then {teamId} and {playerId}.
+// A squad can be changed by the tournament's owners and by that team's admins (ManageTeam, 2026-11-20); adding
+// or deleting teams, and naming admins, stay with the owners.
 [ApiController]
 [Route("api/tournaments/{id}/teams")]
 [DefaultRoles(RoleIds.EndUser)] // every signed-up user; Admin is ticked too
@@ -48,7 +50,7 @@ public class TeamsController : ApiController
     // PUT api/tournaments/5/teams/9
     [HttpPut("{teamId}")]
     [ServiceRequestId("TEAM_UPDATE")]
-    [TournamentAccess(TournamentPermission.Edit)]
+    [TournamentAccess(TournamentPermission.ManageTeam)]
     public async Task<ActionResult<ApiResponse<Team>>> UpdateTeam(int id, int teamId, [FromBody] UpdateTeamRequest request) =>
         Respond(await _teams.UpdateTeamAsync(id, teamId, request));
 
@@ -62,28 +64,28 @@ public class TeamsController : ApiController
     // POST api/tournaments/5/teams/9/join-code/reset — the old code stops working
     [HttpPost("{teamId}/join-code/reset")]
     [ServiceRequestId("TEAM_JOIN_CODE_RESET")]
-    [TournamentAccess(TournamentPermission.Edit)]
+    [TournamentAccess(TournamentPermission.ManageTeam)]
     public async Task<ActionResult<ApiResponse<Team>>> ResetJoinCode(int id, int teamId) =>
         Respond(await _teams.ResetJoinCodeAsync(id, teamId));
 
     // POST api/tournaments/5/teams/9/players/lookup — who an email or number belongs to, before adding them
     [HttpPost("{teamId}/players/lookup")]
     [ServiceRequestId("PLAYER_CONTACT_LOOKUP")]
-    [TournamentAccess(TournamentPermission.Edit)]
+    [TournamentAccess(TournamentPermission.ManageTeam)]
     public async Task<ActionResult<ApiResponse<PlayerLookupDto>>> LookupPlayer(int id, int teamId, [FromBody] PlayerLookupRequest request) =>
         Respond(await _teams.LookupPlayerAsync(id, teamId, request));
 
     // POST api/tournaments/5/teams/9/players
     [HttpPost("{teamId}/players")]
     [ServiceRequestId("PLAYER_CREATE")]
-    [TournamentAccess(TournamentPermission.Edit)]
+    [TournamentAccess(TournamentPermission.ManageTeam)]
     public async Task<ActionResult<ApiResponse<Player>>> AddPlayer(int id, int teamId, [FromBody] CreatePlayerRequest request) =>
         Respond(await _teams.AddPlayerAsync(id, teamId, request));
 
     // PUT api/tournaments/5/teams/9/players/3
     [HttpPut("{teamId}/players/{playerId}")]
     [ServiceRequestId("PLAYER_UPDATE")]
-    [TournamentAccess(TournamentPermission.Edit)]
+    [TournamentAccess(TournamentPermission.ManageTeam)]
     public async Task<ActionResult<ApiResponse<Player>>> UpdatePlayer(int id, int teamId, int playerId, [FromBody] UpdatePlayerRequest request) =>
         Respond(await _teams.UpdatePlayerAsync(id, teamId, playerId, request));
 
@@ -97,7 +99,28 @@ public class TeamsController : ApiController
     // DELETE api/tournaments/5/teams/9/players/3
     [HttpDelete("{teamId}/players/{playerId}")]
     [ServiceRequestId("PLAYER_DELETE")]
-    [TournamentAccess(TournamentPermission.Edit)]
+    [TournamentAccess(TournamentPermission.ManageTeam)]
     public async Task<ActionResult<ApiResponse<object>>> DeletePlayer(int id, int teamId, int playerId) =>
         Respond(await _teams.DeletePlayerAsync(id, teamId, playerId), _ => Ok());
+
+    // POST api/tournaments/5/teams/9/players/3/restore — back into the squad after being left out
+    [HttpPost("{teamId}/players/{playerId}/restore")]
+    [ServiceRequestId("PLAYER_RESTORE")]
+    [TournamentAccess(TournamentPermission.ManageTeam)]
+    public async Task<ActionResult<ApiResponse<Team>>> RestorePlayer(int id, int teamId, int playerId) =>
+        Respond(await _teams.RestorePlayerAsync(id, teamId, playerId));
+
+    // POST api/tournaments/5/teams/9/admins — an owner names someone to run this team
+    [HttpPost("{teamId}/admins")]
+    [ServiceRequestId("TEAM_ADMIN_ADD")]
+    [TournamentAccess(TournamentPermission.Edit)]
+    public async Task<ActionResult<ApiResponse<Team>>> AddAdmin(int id, int teamId, [FromBody] AddTeamAdminRequest request) =>
+        Respond(await _teams.AddAdminAsync(id, teamId, request));
+
+    // DELETE api/tournaments/5/teams/9/admins/12 — an owner removes them, or the admin steps down (checked in the service)
+    [HttpDelete("{teamId}/admins/{userId}")]
+    [ServiceRequestId("TEAM_ADMIN_REMOVE")]
+    [TournamentAccess(TournamentPermission.View)]
+    public async Task<ActionResult<ApiResponse<Team>>> RemoveAdmin(int id, int teamId, int userId) =>
+        Respond(await _teams.RemoveAdminAsync(id, teamId, userId));
 }

@@ -7,6 +7,7 @@ using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Cricket;
 using TournamentScheduler.Api.Services.Access;
 using TournamentScheduler.Api.Services.Versions;
+using TournamentScheduler.Api.Pictures;
 
 namespace TournamentScheduler.Api.Services.Accounts;
 
@@ -55,6 +56,8 @@ public class AccountService : ServiceBase, IAccountService
     private readonly TimeProvider _clock;
     private readonly ILogger<AccountService> _logger;
 
+    private readonly PictureLinks _pictureLinks;
+
     public AccountService(
         IDataService<User> users,
         IDataService<UserSession> sessions,
@@ -69,8 +72,10 @@ public class AccountService : ServiceBase, IAccountService
         IOptions<SmsOptions> sms,
         AppVersionCache versions,
         TimeProvider clock,
-        ILogger<AccountService> logger)
+        ILogger<AccountService> logger,
+        PictureLinks pictureLinks)
     {
+        _pictureLinks = pictureLinks;
         _users = users;
         _sessions = sessions;
         _roles = roles;
@@ -417,6 +422,7 @@ public class AccountService : ServiceBase, IAccountService
             RoleId = user.RoleId,
             RoleName = roleName,
             MemberSince = user.Crd,
+            PhotoUrl = _pictureLinks.For(user.PhotoId),
             Cricket = await _profiles.GetByIdAsync(user.UserId),
             CanDelete = user.RoleId != RoleIds.Admin,
             CanRemoveEmail = user.EmailId != null && user.PhoneNumber != null && user.RoleId != RoleIds.Admin,

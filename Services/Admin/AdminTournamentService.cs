@@ -9,12 +9,14 @@ public interface IAdminTournamentService
 {
     Task<ServiceResult<AdminTournamentPage>> ListAsync(AdminTournamentView view, string? search, int? page, int? pageSize);
     Task<ServiceResult<AdminTournamentDto>> ReopenAsync(int id, ReopenTournamentRequest request);
+    Task<ServiceResult<AdminTournamentDto>> SetHiddenAsync(int id, bool hidden);
 }
 
 /// <summary>
 /// Every tournament, for the portal — paged on the server, in three pages: Live, Upcoming, and
 /// Past (completed and cancelled). Admins don't get into tournaments from here; they see who runs
-/// each one, and can reopen one closed by mistake (owners can't).
+/// each one, can reopen one closed by mistake (owners can't), and can hide one from the public — every tournament is
+/// public otherwise (2026-11-23), so this is the takedown for a school, a parent or a complaint.
 /// </summary>
 public class AdminTournamentService : ServiceBase, IAdminTournamentService
 {
@@ -118,13 +120,29 @@ public class AdminTournamentService : ServiceBase, IAdminTournamentService
         return Success((await Rows([id])).Single());
     }
 
+    /// <summary>
+    /// Hidden: its link, its public pages and search stop at once and followers can't open it (members and players
+    /// still can). Shown again: the same link works again — it is never changed.
+    /// </summary>
+    public async Task<ServiceResult<AdminTournamentDto>> SetHiddenAsync(int id, bool hidden)
+    {
+        var tournament = await _tournaments.GetByIdAsync(id);
+        if (tournament == null) return NotFound("Tournament not found.");
+
+        tournament.IsPublic = !hidden;
+        // Tournaments made before every one had a link get theirs on the way back.
+        tournament.PublicCode ??= await Public.PublicCodes.UnusedAsync(_tournaments);
+        await _unitOfWork.SaveChangesAsync();
+        return Success((await Rows([id])).Single());
+    }
+
     private async Task<List<AdminTournamentDto>> Rows(List<int> ids)
     {
         var rows = await _tournaments.QueryAsync(q => q
             .Where(t => ids.Contains(t.Id))
             .Select(t => new
             {
-                t.Id, t.Name, t.Sport, t.Status, t.StartDate, t.EndDate, t.CreatedAt, t.CompletedAt, t.CreatedByUserId,
+                t.Id, t.Name, t.Sport, t.Status, t.StartDate, t.EndDate, t.CreatedAt, t.CompletedAt, t.CreatedByUserId, t.IsPublic,
                 Teams = t.Teams.Count
             }), tracking: false);
 
@@ -153,7 +171,8 @@ public class AdminTournamentService : ServiceBase, IAdminTournamentService
                 People = members.Where(m => m.TournamentId == r.Id).Select(m => m.UserId)
                     .Concat(players.Where(p => p.TournamentId == r.Id).Select(p => p.UserId))
                     .Distinct().Count(),
-                CanReopen = r.Status is TournamentStatus.Completed or TournamentStatus.Cancelled
+                CanReopen = r.Status is TournamentStatus.Completed or TournamentStatus.Cancelled,
+                Hidden = !r.IsPublic
             };
         }).ToList();
     }

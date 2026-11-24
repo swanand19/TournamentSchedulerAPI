@@ -20,6 +20,12 @@ public interface ICricketStatsService
 
     /// <summary>The team that won the tournament's Final, once it has been played; null otherwise.</summary>
     Task<int?> ChampionAsync(int tournamentId);
+
+    /// <summary>
+    /// One player's innings and spells in a tournament, match by match, from the same matches the
+    /// leaderboards count (a match in play included, marked as such); super overs left out.
+    /// </summary>
+    Task<(List<PlayerMatchLine> Batting, List<PlayerMatchLine> Bowling)> PlayerLinesAsync(int tournamentId, int playerId);
 }
 
 /// <summary>A tournament's figures for career pages: per player, plus the match awards.</summary>
@@ -27,7 +33,17 @@ public sealed class CricketTournamentFigures
 {
     public Dictionary<int, CricketPlayerFigures> Players { get; init; } = new();
     public List<CricketPlayerOfMatchAward> PlayersOfMatch { get; init; } = new();
+
+    /// <summary>Every innings and every spell (super overs left out), for boards that rank one innings or one spell (leagues).</summary>
+    public List<CricketInningsFigure> Innings { get; init; } = new();
+    public List<CricketSpellFigure> Spells { get; init; } = new();
 }
+
+/// <summary>One innings: what "Highest score" ranks.</summary>
+public sealed record CricketInningsFigure(int PlayerId, int MatchId, int MatchNumber, string Opponent, int Runs, int Balls, int Fours, int Sixes, bool NotOut);
+
+/// <summary>One spell: what "Best figures" ranks.</summary>
+public sealed record CricketSpellFigure(int PlayerId, int MatchId, int MatchNumber, string Opponent, int Wickets, int Runs, int LegalBalls, int BallsPerOver, int Maidens);
 
 public sealed record CricketPlayerOfMatchAward(
     int PlayerId, int MatchId, int MatchNumber, string Fixture, DateTime? Date, string Summary);
@@ -43,7 +59,7 @@ public sealed class CricketPlayerFigures
     /// <summary>-1 until the player has batted.</summary>
     public int High = -1;
     public bool HighNotOut;
-    public int BowlingInnings, LegalBalls, RunsConceded, Wickets, Maidens, Hauls3, Hauls5;
+    public int BowlingInnings, LegalBalls, RunsConceded, Wickets, Maidens, Hauls3, Hauls5, Dots;
     public double Overs;
     /// <summary>-1 until the player has bowled.</summary>
     public int BestWickets = -1, BestRuns;
@@ -64,7 +80,7 @@ public sealed class CricketPlayerFigures
         Fours += o.Fours; Sixes += o.Sixes; Fifties += o.Fifties; Hundreds += o.Hundreds; Ducks += o.Ducks;
         if (o.High > High || (o.High == High && o.HighNotOut)) { High = o.High; HighNotOut = o.HighNotOut; }
         BowlingInnings += o.BowlingInnings; LegalBalls += o.LegalBalls; RunsConceded += o.RunsConceded;
-        Wickets += o.Wickets; Maidens += o.Maidens; Hauls3 += o.Hauls3; Hauls5 += o.Hauls5; Overs += o.Overs;
+        Wickets += o.Wickets; Maidens += o.Maidens; Hauls3 += o.Hauls3; Hauls5 += o.Hauls5; Overs += o.Overs; Dots += o.Dots;
         if (o.BestWickets > BestWickets || (o.BestWickets == BestWickets && o.BestRuns < BestRuns))
         {
             BestWickets = o.BestWickets;
@@ -153,9 +169,22 @@ public class CricketStatsService : ICricketStatsService
             PlayersOfMatch = ledger.PlayersOfMatch()
                 .Select(p => new CricketPlayerOfMatchAward(p.PlayerId, p.MatchId, p.MatchNumber, p.Fixture,
                     matches.First(m => m.Id == p.MatchId).CompletedAt, p.Summary))
-                .ToList()
+                .ToList(),
+            Innings = ledger.InningsFigures(),
+            Spells = ledger.SpellFigures()
         };
     }
+
+    public async Task<(List<PlayerMatchLine> Batting, List<PlayerMatchLine> Bowling)> PlayerLinesAsync(int tournamentId, int playerId)
+    {
+        var matches = await _matches.ListAsync(
+            m => m.TournamentId == tournamentId && m.Squad.Any(s => s.PlayerId == playerId), CricketMatchQueries.Full, tracking: false);
+        return PlayerLines(matches, playerId);
+    }
+
+    /// <summary>Pure, like <see cref="Build"/>: the lines a leaderboard row unfolds into.</summary>
+    public static (List<PlayerMatchLine> Batting, List<PlayerMatchLine> Bowling) PlayerLines(List<CricketMatch> matches, int playerId) =>
+        new Ledger(matches, new Dictionary<int, CricketRole>()).PlayerLines(playerId);
 
     /// <summary>Pure: everything below works on already-loaded matches, which is what the tests use.</summary>
     public static CricketTournamentStats Build(
@@ -442,10 +471,12 @@ public class CricketStatsService : ICricketStatsService
     }
 
     private sealed record InningsRecord(
-        int PlayerId, int MatchNumber, string Opponent, int Runs, int Balls, int Fours, int Sixes, bool NotOut);
+        int PlayerId, int MatchNumber, string Opponent, int Runs, int Balls, int Fours, int Sixes, bool NotOut,
+        int MatchId, bool InPlay);
 
     private sealed record SpellRecord(
-        int PlayerId, int MatchNumber, string Opponent, int Wickets, int Runs, int LegalBalls, int BallsPerOver);
+        int PlayerId, int MatchNumber, string Opponent, int Wickets, int Runs, int LegalBalls, int BallsPerOver,
+        int MatchId, int Maidens, bool InPlay);
 
     private sealed record PartnershipRecord(
         string TeamName, string Opponent, int MatchNumber, int Wicket, int Runs, int Balls, string Batters);
@@ -552,7 +583,8 @@ public class CricketStatsService : ICricketStatsService
                 }
 
                 _innings.Add(new InningsRecord(row.PlayerId, match.MatchNumber, Opponent(match, inn.BattingTeamId),
-                    row.Runs, row.BallsFaced, row.Fours, row.Sixes, !row.IsOut));
+                    row.Runs, row.BallsFaced, row.Fours, row.Sixes, !row.IsOut,
+                    match.Id, match.Status != CricketMatchStatus.Completed));
 
                 var line = lineFor(row.PlayerId);
                 line.Batted = true;
@@ -589,7 +621,8 @@ public class CricketStatsService : ICricketStatsService
                 }
 
                 _spells.Add(new SpellRecord(row.PlayerId, match.MatchNumber, Opponent(match, inn.BowlingTeamId),
-                    row.Wickets, row.Runs, row.LegalBalls, inn.BallsPerOver));
+                    row.Wickets, row.Runs, row.LegalBalls, inn.BallsPerOver,
+                    match.Id, row.Maidens, match.Status != CricketMatchStatus.Completed));
 
                 var line = lineFor(row.PlayerId);
                 line.Bowled = true;
@@ -697,6 +730,14 @@ public class CricketStatsService : ICricketStatsService
             });
         }
 
+        public List<CricketInningsFigure> InningsFigures() => _innings
+            .Select(r => new CricketInningsFigure(r.PlayerId, r.MatchId, r.MatchNumber, r.Opponent, r.Runs, r.Balls, r.Fours, r.Sixes, r.NotOut))
+            .ToList();
+
+        public List<CricketSpellFigure> SpellFigures() => _spells
+            .Select(x => new CricketSpellFigure(x.PlayerId, x.MatchId, x.MatchNumber, x.Opponent, x.Wickets, x.Runs, x.LegalBalls, x.BallsPerOver, x.Maidens))
+            .ToList();
+
         /// <summary>Every player's raw figures, for career pages to add up across tournaments.</summary>
         public Dictionary<int, CricketPlayerFigures> Figures()
         {
@@ -714,7 +755,7 @@ public class CricketStatsService : ICricketStatsService
                 if (_bowl.TryGetValue(id, out var w))
                 {
                     f.BowlingInnings = w.Innings; f.LegalBalls = w.LegalBalls; f.Overs = w.Overs; f.RunsConceded = w.Runs;
-                    f.Wickets = w.Wickets; f.Maidens = w.Maidens; f.Hauls3 = w.Hauls3; f.Hauls5 = w.Hauls5;
+                    f.Wickets = w.Wickets; f.Maidens = w.Maidens; f.Hauls3 = w.Hauls3; f.Hauls5 = w.Hauls5; f.Dots = w.Dots;
                     f.BestWickets = w.BestWickets; f.BestRuns = w.BestRuns;
                 }
                 if (_field.TryGetValue(id, out var fl))
@@ -725,6 +766,42 @@ public class CricketStatsService : ICricketStatsService
                 result[id] = f;
             }
             return result;
+        }
+
+        /// <summary>
+        /// A player's own innings ("45* (32)") and spells ("3.2-0-28-2", overs-maidens-runs-wickets),
+        /// in match order — the same records the leaderboards are folded from.
+        /// </summary>
+        public (List<PlayerMatchLine> Batting, List<PlayerMatchLine> Bowling) PlayerLines(int playerId)
+        {
+            static string? Boundaries(int fours, int sixes)
+            {
+                var parts = new List<string>();
+                if (fours > 0) parts.Add(fours == 1 ? "1 four" : $"{fours} fours");
+                if (sixes > 0) parts.Add(sixes == 1 ? "1 six" : $"{sixes} sixes");
+                return parts.Count == 0 ? null : string.Join(" · ", parts);
+            }
+
+            var batting = _innings.Where(r => r.PlayerId == playerId).Select(r => new PlayerMatchLine
+            {
+                MatchId = r.MatchId,
+                MatchNumber = r.MatchNumber,
+                Opponent = r.Opponent,
+                Value = $"{r.Runs}{(r.NotOut ? "*" : "")} ({r.Balls})",
+                Detail = Boundaries(r.Fours, r.Sixes),
+                InPlay = r.InPlay
+            }).ToList();
+
+            var bowling = _spells.Where(s => s.PlayerId == playerId).Select(s => new PlayerMatchLine
+            {
+                MatchId = s.MatchId,
+                MatchNumber = s.MatchNumber,
+                Opponent = s.Opponent,
+                Value = $"{s.LegalBalls / s.BallsPerOver}{(s.LegalBalls % s.BallsPerOver > 0 ? $".{s.LegalBalls % s.BallsPerOver}" : "")}-{s.Maidens}-{s.Runs}-{s.Wickets}",
+                InPlay = s.InPlay
+            }).ToList();
+
+            return (batting, bowling);
         }
 
         private string Name(int id) => _who.TryGetValue(id, out var w) ? w.Name : $"Player {id}";

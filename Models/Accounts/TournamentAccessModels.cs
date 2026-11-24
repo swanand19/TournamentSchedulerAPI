@@ -58,13 +58,58 @@ public enum TournamentPermission
     ManageMembers,
 
     /// <summary>Delete it: only the person who created it.</summary>
-    Delete
+    Delete,
+
+    /// <summary>
+    /// Change one team's squad (the route's <c>teamId</c>): owners, and that team's admins (2026-11-20). Admins get
+    /// nothing else from it — not other teams, not the schedule, and never scoring (decision C-14).
+    /// </summary>
+    ManageTeam
+}
+
+/// <summary>
+/// Someone who runs one team inside one tournament (2026-11-20, step 1 of docs/reusable-teams-plan.md): usually its
+/// captain. Named by an owner; may change that squad, nothing else. At most <see cref="MaxPerTeam"/> per team.
+/// <c>TournamentId</c> is a copy of the team's, so "my tournaments" and the access check need one indexed read.
+/// </summary>
+public class TeamAdmin : AuditedEntity
+{
+    public const int MaxPerTeam = 3;
+
+    public int TeamAdminId { get; set; }
+    public int TeamId { get; set; }
+    public int TournamentId { get; set; }
+    public int UserId { get; set; }
+
+    [JsonIgnore]
+    public User? User { get; set; }
+}
+
+/// <summary>A team admin as a team's answer lists them.</summary>
+public class TeamAdminDto
+{
+    public int UserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public bool IsMe { get; set; }
+
+    /// <summary>Owners may remove anyone; an admin may step down themselves.</summary>
+    public bool CanRemove { get; set; }
+}
+
+/// <summary>An owner naming a team's admin: one of the team's linked players, or anyone by email or number.</summary>
+public class AddTeamAdminRequest
+{
+    /// <summary>A player on this team who is linked to an account.</summary>
+    public int? PlayerId { get; set; }
+
+    /// <summary>An email or mobile number with an account (used when <see cref="PlayerId"/> is empty).</summary>
+    public string? Contact { get; set; }
 }
 
 /// <summary>What the apps need to draw a tournament's buttons — the server decides, they only draw.</summary>
 public class TournamentAccessDto
 {
-    /// <summary>"creator", "owner", "scorer", "player" — what the signed-in person is here.</summary>
+    /// <summary>"creator", "owner", "scorer", "player", "teamAdmin", "follower", "auction" — what the signed-in person is here.</summary>
     public List<string> MyRoles { get; set; } = [];
 
     /// <summary>Their own squad place here, when they play in it.</summary>
@@ -85,6 +130,9 @@ public class TournamentAccessDto
 
     /// <summary>They follow it (6E) — the apps offer "Stop following".</summary>
     public bool IsFollowing { get; set; }
+
+    /// <summary>The teams they run here as a team admin (owners change every squad through <see cref="CanEdit"/>).</summary>
+    public List<int> ManagedTeamIds { get; set; } = [];
 }
 
 public class TournamentMemberDto

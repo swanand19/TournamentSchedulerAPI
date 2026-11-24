@@ -42,12 +42,16 @@ public class Tournament
     [NotMapped]
     public TournamentAccessDto? Access { get; set; }
 
-    /// <summary>The owners' switch (6E): anyone with the link may watch, without an account. Off by default.</summary>
-    public bool IsPublic { get; set; }
+    /// <summary>
+    /// Anyone may watch it, without an account, by its link (6E). Every tournament is public since 2026-11-23 (the user's
+    /// choice: a sports event has nothing to hide, and no email or number is ever shown); only an admin turns this off,
+    /// with the portal's "Hide from the public" (a takedown, e.g. a junior tournament a school asks to remove).
+    /// </summary>
+    public bool IsPublic { get; set; } = true;
 
     /// <summary>
-    /// The code in the public link (8 characters, no look-alikes), made the first time it is switched
-    /// on and replaced by "New link". Only ever shown through <see cref="Share"/>.
+    /// The code in the public link (8 characters, no look-alikes), made with the tournament and kept for good.
+    /// Only ever shown through <see cref="Share"/>.
     /// </summary>
     [JsonIgnore]
     public string? PublicCode { get; set; }
@@ -55,6 +59,47 @@ public class Tournament
     /// <summary>The public link while <see cref="IsPublic"/> — filled in per request, never stored.</summary>
     [NotMapped]
     public Public.PublicShareDto? Share { get; set; }
+
+    /// <summary>The tournament's square picture and its 16:9 banner (HLD P-26), set by owners. Files, never sent as is.</summary>
+    [JsonIgnore]
+    public string? LogoId { get; set; }
+
+    [JsonIgnore]
+    public string? BannerId { get; set; }
+
+    /// <summary>Signed, expiring links to the pictures above — filled in per request, never stored.</summary>
+    [NotMapped]
+    public string? LogoUrl { get; set; }
+
+    [NotMapped]
+    public string? BannerUrl { get; set; }
+
+    /// <summary>
+    /// "Teams can enter with a code" (lasting teams, step 3): the code an organiser sends to the admins of teams they want
+    /// (9 characters, so the Join field can tell it from team, pool and club codes). Kept when switched off, so switching on
+    /// again gives the same code. Shown to owners only, on the entries answer.
+    /// </summary>
+    [JsonIgnore]
+    public string? EntryCode { get; set; }
+
+    /// <summary>Whether the entry code works now. Approving a schedule, setting up a knockout or starting turns it off (C-10).</summary>
+    [JsonIgnore]
+    public bool EntriesOpen { get; set; }
+
+    /// <summary>
+    /// The league this tournament is a season of (2026-11-24), or null for a one-off. Its season number is worked out from
+    /// the league's seasons in date order, never stored. Shown through <see cref="League"/>.
+    /// </summary>
+    [JsonIgnore]
+    public int? LeagueId { get; set; }
+
+    [JsonIgnore]
+    public Leagues.League? LeagueRow { get; set; }
+
+    /// <summary>"Season 3 of Corporate Premier League" — filled in per request, left out of the JSON for a one-off tournament.</summary>
+    [NotMapped]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Leagues.LeagueBadgeDto? League { get; set; }
 
     [JsonIgnore]
     public bool IsClosed => Status is TournamentStatus.Completed or TournamentStatus.Cancelled;

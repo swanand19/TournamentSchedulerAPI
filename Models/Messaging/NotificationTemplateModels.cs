@@ -35,7 +35,37 @@ public enum NotificationTemplateCode
     AllMatchesPlayed,
     EndDateMatchesLeft,
     EndDateAllPlayed,
-    EndDateNotStarted
+    EndDateNotStarted,
+
+    // The player auction (2026-11-17).
+    AuctionStarted,
+    AuctionBought,
+
+    // The team draw (2026-11-17).
+    DrawStarted,
+    DrawPicked,
+    AuctionBidderReplaced,
+    AuctionBidderNow,
+
+    // Team admins (2026-11-20).
+    MadeTeamAdmin,
+
+    // Lasting teams (2026-11-20, step 2 of docs/reusable-teams-plan.md). People see "team"; the code says club.
+    AddedToClub,
+    MadeClubAdmin,
+    KeepTeam,
+
+    // Entering tournaments with a code, and club changes reaching squads (2026-11-21, steps 3 and 4).
+    EntryRequested,
+    EntryAccepted,
+    EntryDeclined,
+    EntryCancelled,
+    ClubPlayerJoined,
+    Followed,
+    FollowedPlaying,
+
+    // Leagues (2026-11-24).
+    MadeLeagueOrganiser
 }
 
 /// <summary>

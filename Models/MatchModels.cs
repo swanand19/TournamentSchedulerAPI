@@ -309,17 +309,26 @@ public class EndPenaltiesRequest
     public int WinningTeamId { get; set; }
 }
 
+/// <summary>
+/// One player's place in a match's squad. In an answer it carries ids only: the match answer already
+/// has both teams with their players once, and with these links serialised each of the 22 squad
+/// entries repeated its whole team — 46 KB of a 51 KB answer the live screen asks for every few
+/// seconds. Both apps look the player up in the teams by <see cref="PlayerId"/>.
+/// </summary>
 public class MatchPlayer
 {
     public int Id { get; set; }
 
     public int MatchId { get; set; }
+    [JsonIgnore]
     public Match? Match { get; set; }
 
     public int PlayerId { get; set; }
+    [JsonIgnore]
     public Player? Player { get; set; }
 
     public int TeamId { get; set; }
+    [JsonIgnore]
     public Team? Team { get; set; }
 
     public SquadStatus SquadStatus { get; set; }

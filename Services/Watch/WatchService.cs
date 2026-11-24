@@ -157,7 +157,7 @@ public class WatchService : ServiceBase, IWatchService
         if (match.Status == MatchStatus.NotStarted)
         {
             side.Heading = "Squad";
-            side.Players = Ordered(players.Values.Select(Row)).ToList();
+            side.Players = Ordered(players.Values.Where(p => p.LeftOn == null).Select(Row)).ToList();
             return side;
         }
 
@@ -272,7 +272,7 @@ public class WatchService : ServiceBase, IWatchService
         if (!match.IsSetUp)
         {
             side.Heading = "Squad";
-            side.Players = players.Values.Select(Row).OrderBy(r => r.JerseyNumber ?? int.MaxValue).ThenBy(r => r.Name).ToList();
+            side.Players = players.Values.Where(p => p.LeftOn == null).Select(Row).OrderBy(r => r.JerseyNumber ?? int.MaxValue).ThenBy(r => r.Name).ToList();
             return side;
         }
 

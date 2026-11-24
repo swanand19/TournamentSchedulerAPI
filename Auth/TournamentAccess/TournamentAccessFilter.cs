@@ -23,7 +23,7 @@ namespace TournamentScheduler.Api.Auth.TournamentAccess;
 /// its tournament there.
 /// </summary>
 public sealed class TournamentAccessFilter(ITournamentAccessService access, INotifier notifier, IKnockoutService knockouts, ICurrentUser currentUser,
-    ITournamentContext tournament, ILiveUpdates live) : IAsyncActionFilter
+    ITournamentContext tournament, ILiveUpdates live, Services.People.IFollowService people) : IAsyncActionFilter
 {
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
@@ -44,7 +44,7 @@ public sealed class TournamentAccessFilter(ITournamentAccessService access, INot
         }
 
         var sport = context.RouteData.Values.TryGetValue("sport", out var s) ? s?.ToString() : null;
-        var outcome = await access.CheckAsync(rule.From, id.Value, sport, rule.Permission, rule.IgnoresScorerLock);
+        var outcome = await access.CheckAsync(rule.From, id.Value, sport, rule.Permission, rule.IgnoresScorerLock, RouteInt(context, "teamId"));
         if (!outcome.IsAllowed)
         {
             context.Result = Refusal(outcome.StatusCode, outcome.Message!);
@@ -61,6 +61,11 @@ public sealed class TournamentAccessFilter(ITournamentAccessService access, INot
             // A match just ended can settle a group or a knockout side; then the "all played" check.
             await knockouts.AfterScoringAsync();
             await notifier.AfterScoringAsync();
+
+            // A match just set up (cricket) or kicked off (football): its players' followers who may watch hear of it.
+            var serviceId = context.ActionDescriptor.EndpointMetadata.OfType<Gateway.ServiceRequestIdAttribute>().FirstOrDefault()?.Id;
+            if (serviceId is "MATCH_SETUP" or "CRICKET_SETUP" && tournament.Match is { } started)
+                await people.MatchStartedAsync(started);
         }
 
         // Anything that may change something (viewing and reading never do) nudges whoever is watching the
@@ -86,12 +91,16 @@ public sealed class TournamentAccessFilter(ITournamentAccessService access, INot
                 ? bodyId
                 : null;
 
-        var key = from switch
+        return RouteInt(context, from switch
         {
             TournamentScope.Tournament => "id",
             TournamentScope.Schedule => "scheduleId",
             _ => "matchId"
-        };
+        });
+    }
+
+    private static int? RouteInt(ActionExecutingContext context, string key)
+    {
         return context.RouteData.Values.TryGetValue(key, out var raw)
                && int.TryParse(Convert.ToString(raw, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
             ? value

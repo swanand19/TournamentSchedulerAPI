@@ -107,7 +107,7 @@ public sealed class SmtpOptions
     public string? UserName { get; set; }
     public string? Password { get; set; }
     public string? FromAddress { get; set; }
-    public string FromName { get; set; } = "Tournament Scheduler";
+    public string FromName { get; set; } = "KickCricket";
     public int TimeoutSeconds { get; set; } = 15;
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Host) && !string.IsNullOrWhiteSpace(FromAddress);

@@ -95,6 +95,13 @@ public class User : AuditedEntity
     public int FailedPasswordCount { get; set; }
 
     public DateTime? PasswordLockedUntil { get; set; }
+
+    /// <summary>
+    /// Their profile photo's file (HLD P-26: a random name in the pictures folder), set and removed by the
+    /// person alone. Never sent as is: answers carry a signed, expiring link instead.
+    /// </summary>
+    [JsonIgnore]
+    public string? PhotoId { get; set; }
 }
 
 /// <summary>

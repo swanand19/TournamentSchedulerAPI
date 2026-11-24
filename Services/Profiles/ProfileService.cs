@@ -5,6 +5,7 @@ using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Profiles;
 using TournamentScheduler.Api.Services.Cricket;
+using TournamentScheduler.Api.Pictures;
 
 namespace TournamentScheduler.Api.Services.Profiles;
 
@@ -38,6 +39,9 @@ public class ProfileService : ServiceBase, IProfileService
     private readonly ICricketStatsService _cricket;
     private readonly ICurrentUser _currentUser;
 
+    private readonly PictureLinks _pictureLinks;
+    private readonly People.IFollowService? _follows;
+
     public ProfileService(
         IDataService<User> users,
         IDataService<Player> players,
@@ -45,8 +49,12 @@ public class ProfileService : ServiceBase, IProfileService
         IDataService<Tournament> tournaments,
         IStatsService football,
         ICricketStatsService cricket,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        PictureLinks pictureLinks,
+        People.IFollowService? follows = null)
     {
+        _follows = follows;
+        _pictureLinks = pictureLinks;
         _users = users;
         _players = players;
         _members = members;
@@ -83,6 +91,7 @@ public class ProfileService : ServiceBase, IProfileService
             Name = user.Name,
             IsMe = me,
             MemberSince = user.Crd,
+            PhotoUrl = _pictureLinks.For(user.PhotoId),
             Email = me ? user.EmailId : null,
             Phone = me ? user.PhoneNumber : null,
             TournamentsRun = (await _members.QueryAsync(q => q
@@ -112,6 +121,13 @@ public class ProfileService : ServiceBase, IProfileService
             }
 
             profile.Sports.Add(card);
+        }
+
+        // Following (2026-11-23): only for someone signed in; the public pages' profiles go without.
+        if (Me is int viewer && _follows != null)
+        {
+            profile.Follow = await _follows.SummaryAsync(user.UserId, viewer);
+            profile.PlayingNow = await _follows.PlayingNowAsync(user.UserId, viewer);
         }
 
         return Success(profile);

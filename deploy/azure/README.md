@@ -57,7 +57,8 @@ Azure gives new web apps a **default domain** like `tournament-api-prod-abc123.c
 6. **Key Vault** (permission model: Azure RBAC). Access control (IAM): yourself **Key Vault Secrets
    Officer**, the web app's identity **Key Vault Secrets User**. Secrets:
    - `smtp-password` — a Gmail **app password** (Google Account → Security → App passwords), not your
-     own password.
+     own password, made on the account that sends: Azure sends as `swanand1908@gmail.com` (`appsettings.Azure.json`
+     → `Smtp`), the laptop as the address in its own settings.
    - `gateway-key-<id>` — the production gateway key, made like this on the laptop (it is a new key; the
      laptop's `20260929` key never goes to Azure):
      ```powershell
@@ -67,8 +68,10 @@ Azure gives new web apps a **default domain** like `tournament-api-prod-abc123.c
      Copy the `.pem` file's whole text (with the BEGIN/END lines) into the secret, keep the printed id
      and public key, then **delete `C:\Temp\prod-key`**.
 7. **Application Insights** (workspace-based, Central India). Usage and estimated costs → Daily cap
-   **0.15 GB**. In the web app: Application Insights → turn on → pick it (this adds
-   `APPLICATIONINSIGHTS_CONNECTION_STRING` for you).
+   **0.15 GB**. Copy its **Connection string** (Overview) into the app setting
+   `APPLICATIONINSIGHTS_CONNECTION_STRING` (step 8) by hand. Don't use the web app's "Application Insights →
+   Turn on" button: on Linux it adds Azure's own agent beside the API's OpenTelemetry exporter
+   (`Program.cs`), which can send everything twice.
 8. **App settings** — web app → Environment variables. Key Vault references look like
    `@Microsoft.KeyVault(SecretUri=https://kv-tournament-prod.vault.azure.net/secrets/<name>/)`; after
    saving, each should show a green "Key vault reference" tick.
@@ -84,12 +87,14 @@ Azure gives new web apps a **default domain** like `tournament-api-prod-abc123.c
    | `Hosting__AllowedOrigins__0` | `https://<web Static Web App's domain>` |
    | `Hosting__AllowedOrigins__1` | `https://<portal Static Web App's domain>` |
    | `Public__WebAppUrl` | `https://<web Static Web App's domain>` |
+   | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Application Insights → Overview → Connection string (step 7) |
+   | `WEBSITES_CONTAINER_START_TIME_LIMIT` | `600` — on B1, App Service's own certificate refresh before our API starts took up to 2 min 40 s (2026-11-19); the default 230 s limit then fails the start. The old copy keeps serving meanwhile, so nobody waits. |
 
    Connection strings (type **SQLAzure**), both the same — game and log tables share the database:
 
    | Name | Value |
    |---|---|
-   | `DefaultConnection` | `Server=tcp:sql-tournament-prod.database.windows.net,1433;Database=TournamentSchedulerDB;Authentication=Active Directory Default;Encrypt=True;Connect Timeout=30` |
+   | `DefaultConnection` | `Server=tcp:sql-tournament-prod.database.windows.net,1433;Database=TournamentSchedulerDB;Authentication=Active Directory Managed Identity;Encrypt=True;Connect Timeout=30` (straight to the web app's identity; "Default" tries a chain of sign-in methods first) |
    | `LogConnection` | the same |
 
    Not set, on purpose: `Sms__Provider` (None until WhatsApp is ready — the apps hide number fields), any
@@ -125,6 +130,8 @@ link = the APK's download link for now. Then the smoke test in the tracker.
 
 ## Releasing (every time after)
 
+Step by step, with checks and fixes for each part: **`RELEASE-GUIDE.md`**. In short:
+
 Quiet hour, not during a match. App Service restarts the API (~20 s); the apps retry and the live lines
 reconnect on their own.
 
@@ -159,3 +166,10 @@ reconnect on their own.
 - Browser says CORS → the Static Web App's domain isn't in `Hosting__AllowedOrigins__*` exactly
   (`https://`, no trailing slash needed).
 - Your laptop's IP changed and SSMS can't connect → SQL server → Networking → add your client IP again.
+  On the office network it changes often (several addresses an hour, 2026-11-19).
+- `CERTIFICATE_VERIFY_FAILED` from `az webapp deploy` (or `SELF_SIGNED_CERT_IN_CHAIN` from the Static Web Apps
+  upload): the laptop's network (Zscaler) re-signs `*.azurewebsites.net` traffic with its own root, which
+  Windows trusts but the Azure CLI's Python and Node don't. Point them at it:
+  `$env:REQUESTS_CA_BUNDLE = "$env:USERPROFILE\.azure\ca-bundle-with-zscaler.pem"` (the CLI's own `certifi`
+  list + the Zscaler root from the Windows store, made 2026-11-19) and `$env:NODE_OPTIONS = "--use-system-ca"`
+  before the publish scripts. Off that network neither is needed.

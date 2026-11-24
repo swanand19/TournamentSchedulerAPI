@@ -1,7 +1,10 @@
+using System.Collections.Concurrent;
 using TournamentScheduler.Api.Auth;
 using TournamentScheduler.Api.Data;
 using TournamentScheduler.Api.Data.DataServices;
+using TournamentScheduler.Api.Models;
 using TournamentScheduler.Api.Models.Accounts;
+using TournamentScheduler.Api.Models.Cricket;
 using TournamentScheduler.Api.Models.Messaging;
 using TournamentScheduler.Api.Services.Notifications;
 
@@ -9,6 +12,7 @@ namespace TournamentScheduler.Api.Services.Access;
 
 public interface IScoringLockService
 {
+    Task<ServiceResult<ScoringDto>> ClaimAsync();
     Task<ServiceResult<ScoringDto>> RequestAsync();
     Task<ServiceResult<ScoringDto>> RespondAsync(RespondToScoringRequest request);
     Task<ServiceResult<ScoringDto>> TakeOverAsync();
@@ -18,6 +22,9 @@ public interface IScoringLockService
 /// Handing a match's scoring from one person to another (both sports). The match comes from
 /// <see cref="ITournamentContext"/>, which the access check has filled.
 /// <list type="bullet">
+/// <item><b>Claim</b> — opening a scoring screen (2026-11-20): nobody scoring, it's yours; anyone else's,
+/// nothing changes. Without it the match was taken only at the first scoring action, so two people who
+/// opened a free match both got the buttons until one of them recorded something.</item>
 /// <item><b>Request</b> — nobody scoring: it's yours. The scorer's app not seen for 5 minutes: it's
 /// yours at once. Otherwise the scorer is asked, and has 2 minutes to answer.</item>
 /// <item><b>Respond</b> — the scorer allows (the requester takes over) or declines.</item>
@@ -33,9 +40,13 @@ public class ScoringLockService : ServiceBase, IScoringLockService
     private readonly ICurrentUser _currentUser;
     private readonly TimeProvider _clock;
     private readonly INotifier _notifier;
+    private readonly IDataService<Match> _matches;
+    private readonly IDataService<CricketMatch> _cricketMatches;
+    private readonly ScoringClaimGate _gate;
 
     public ScoringLockService(ITournamentContext context, TournamentAccessService access, IDataService<User> users,
-        IUnitOfWork unitOfWork, ICurrentUser currentUser, TimeProvider clock, INotifier notifier)
+        IUnitOfWork unitOfWork, ICurrentUser currentUser, TimeProvider clock, INotifier notifier,
+        IDataService<Match> matches, IDataService<CricketMatch> cricketMatches, ScoringClaimGate gate)
     {
         _context = context;
         _access = access;
@@ -44,6 +55,9 @@ public class ScoringLockService : ServiceBase, IScoringLockService
         _currentUser = currentUser;
         _clock = clock;
         _notifier = notifier;
+        _matches = matches;
+        _cricketMatches = cricketMatches;
+        _gate = gate;
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
@@ -62,6 +76,34 @@ public class ScoringLockService : ServiceBase, IScoringLockService
     private async Task<ServiceResult<ScoringDto>> Saved(Models.IScoredMatch match)
     {
         await _unitOfWork.SaveChangesAsync();
+        return Success(await _access.BuildScoringAsync(match));
+    }
+
+    public async Task<ServiceResult<ScoringDto>> ClaimAsync()
+    {
+        if (_context.Match is not { } match) return NotFound("Match not found.");
+        if (match.IsOver) return Success(await _access.BuildScoringAsync(match));
+
+        // Two phones opening the same free match at once: one at a time, and each looks at the match as
+        // saved, not as it was read before waiting, so the second sees the first one's claim.
+        var cricket = match is CricketMatch;
+        using (await _gate.EnterAsync(cricket, match.Id))
+        {
+            var holder = cricket
+                ? await _cricketMatches.QueryFirstOrDefaultAsync(q => q.Where(m => m.Id == match.Id).Select(m => m.ActiveScorerUserId), tracking: false)
+                : await _matches.QueryFirstOrDefaultAsync(q => q.Where(m => m.Id == match.Id).Select(m => m.ActiveScorerUserId), tracking: false);
+            if (holder == null)
+            {
+                Hand(match, _currentUser.UserId, Now);
+                await _unitOfWork.SaveChangesAsync();
+            }
+            else
+            {
+                // Someone else's (or already mine): left as it is. The answer says who has it, and the
+                // after-action step then only keeps the holder's "last seen" fresh.
+                match.ActiveScorerUserId = holder;
+            }
+        }
         return Success(await _access.BuildScoringAsync(match));
     }
 
@@ -140,4 +182,29 @@ public class ScoringLockService : ServiceBase, IScoringLockService
         await _notifier.NotifyAsync(userId, code, Notifier.With(
             ("ActorName", Me), ("Match", Notifier.Describe(match)), ("TournamentName", await _notifier.TournamentNameAsync(match.TournamentId))),
             NotificationLink.To(match));
+}
+
+/// <summary>
+/// One claim at a time per match, so two people opening a free match together can't both be handed it.
+/// In memory, like the auction's locks and the gateway's replay cache: it holds for one server.
+/// </summary>
+public sealed class ScoringClaimGate
+{
+    private readonly ConcurrentDictionary<(bool Cricket, int MatchId), SemaphoreSlim> _gates = new();
+
+    public async Task<IDisposable> EnterAsync(bool cricket, int matchId)
+    {
+        var gate = _gates.GetOrAdd((cricket, matchId), _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync();
+        return new Release(gate);
+    }
+
+    private sealed class Release(SemaphoreSlim gate) : IDisposable
+    {
+        private int _done;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _done, 1) == 0) gate.Release();
+        }
+    }
 }

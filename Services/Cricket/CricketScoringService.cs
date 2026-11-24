@@ -190,6 +190,9 @@ public partial class CricketScoringService : ICricketScoringService
             if (player.TeamId != selection.TeamId)
                 return (null, $"{player.Name} does not play for that team.");
 
+            if (player.LeftOn != null)
+                return (null, $"{player.Name} has left the squad, so they can't be picked.");
+
             if (selection.TeamId != match.HomeTeamId && selection.TeamId != match.AwayTeamId)
                 return (null, "A squad was submitted for a team that is not in this match.");
         }

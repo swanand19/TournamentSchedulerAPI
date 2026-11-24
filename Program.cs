@@ -1,3 +1,5 @@
+using TournamentScheduler.Api.Pictures;
+using TournamentScheduler.Api.Services.Pictures;
 using TournamentScheduler.Api.Auth;
 using TournamentScheduler.Api.Data;
 using TournamentScheduler.Api.Gateway;
@@ -56,15 +58,34 @@ builder.Services.AddAccounts(builder.Configuration);
 builder.Services.AddScoped<IHealthService, HealthService>();
 builder.Services.AddScoped<ITournamentService, TournamentService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
+builder.Services.AddScoped<TournamentScheduler.Api.Services.Clubs.IClubService, TournamentScheduler.Api.Services.Clubs.ClubService>();
+builder.Services.AddScoped<TournamentScheduler.Api.Services.Leagues.ILeagueService, TournamentScheduler.Api.Services.Leagues.LeagueService>();
+builder.Services.AddScoped<TournamentScheduler.Api.Services.Clubs.IClubEntryService, TournamentScheduler.Api.Services.Clubs.ClubEntryService>();
+builder.Services.AddScoped<TournamentScheduler.Api.Services.People.IFollowService, TournamentScheduler.Api.Services.People.FollowService>();
+builder.Services.AddScoped<TournamentScheduler.Api.Services.Clubs.ClubSquads>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.AddScoped<IStatsService, StatsService>();
+// One player's innings, spells, goals or assists, under their leaderboard row (2026-11-20).
+builder.Services.AddScoped<IPlayerMatchLinesService, PlayerMatchLinesService>();
 builder.Services.AddScoped<IFootballMatchService, FootballMatchService>();
 builder.Services.AddScoped<ICricketScoringService, CricketScoringService>();
 builder.Services.AddScoped<ICricketMatchQueryService, CricketMatchQueryService>();
 builder.Services.AddScoped<ICricketStatsService, CricketStatsService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
+// Profile photos, tournament logos and banners (HLD P-26).
+builder.Services.AddPictures(builder.Configuration);
+builder.Services.AddScoped<IPictureService, PictureService>();
 builder.Services.AddScoped<IWatchService, WatchService>();
 builder.Services.AddScoped<IKnockoutService, KnockoutService>();
+// The player pool and the auction (2026-11-17): one change at a time per auction, and a job that sells when the bid clock runs out.
+builder.Services.AddScoped<TournamentScheduler.Api.Services.Auctions.IPoolService, TournamentScheduler.Api.Services.Auctions.PoolService>();
+builder.Services.AddScoped<TournamentScheduler.Api.Services.Auctions.IAuctionService, TournamentScheduler.Api.Services.Auctions.AuctionService>();
+builder.Services.AddSingleton<TournamentScheduler.Api.Services.Auctions.AuctionLocks>();
+builder.Services.AddSingleton<TournamentScheduler.Api.Services.Auctions.AuctionClock>();
+builder.Services.AddHostedService<TournamentScheduler.Api.Services.Auctions.AuctionClockJob>();
+builder.Services.AddScoped<TournamentScheduler.Api.Services.Auctions.IDrawService, TournamentScheduler.Api.Services.Auctions.DrawService>();
+builder.Services.AddScoped<TournamentScheduler.Api.Services.Auctions.ISquadMaker, TournamentScheduler.Api.Services.Auctions.SquadMaker>();
+builder.Services.AddSingleton<TournamentScheduler.Api.Services.Auctions.DrawClock>();
 
 // Public live scores (6E): the owners' switch, following, and the anonymous public pages (limited per address).
 builder.Services.Configure<PublicOptions>(builder.Configuration.GetSection(PublicOptions.Section));
@@ -102,6 +123,8 @@ var app = builder.Build();
 
 // First: the caller's real address behind Azure's front end, and the health probe (answered before logging).
 app.UseHostingEdge();
+// Picture links (signed, expiring) are loaded by image components, outside the gateway — HLD P-26.
+app.UsePictures();
 
 // Then each request gets the id every log row about it carries (X-Request-Id).
 app.UseRequestCorrelation();

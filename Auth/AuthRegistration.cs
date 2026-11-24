@@ -44,6 +44,7 @@ public static class AuthRegistration
         services.AddScoped<TournamentAccessService>();
         services.AddScoped<ITournamentAccessService>(sp => sp.GetRequiredService<TournamentAccessService>());
         services.AddScoped<IScoringLockService, ScoringLockService>();
+        services.AddSingleton<ScoringClaimGate>();
         services.AddScoped<ITournamentMemberService, TournamentMemberService>();
         services.AddScoped<ITournamentInviteService, TournamentInviteService>();
 

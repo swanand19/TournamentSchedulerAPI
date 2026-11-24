@@ -12,6 +12,7 @@ public class ScheduleService : ServiceBase, IScheduleService
     private readonly IDataService<Team> _teams;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _clock;
+    private readonly Clubs.IClubEntryService? _entries;
 
     /// <param name="clock">The system clock unless a test gives another; approval checks the dates against "today".</param>
     public ScheduleService(
@@ -19,8 +20,10 @@ public class ScheduleService : ServiceBase, IScheduleService
         IDataService<SavedSchedule> schedules,
         IDataService<Team> teams,
         IUnitOfWork unitOfWork,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        Clubs.IClubEntryService? entries = null)
     {
+        _entries = entries;
         _tournaments = tournaments;
         _schedules = schedules;
         _teams = teams;
@@ -105,6 +108,8 @@ public class ScheduleService : ServiceBase, IScheduleService
             tournament.EndDate = end;
         }
 
+        // The schedule is made, so entries with the code close (C-10); waiting ones are cancelled with the approval.
+        if (_entries != null) await _entries.CloseAsync(request.TournamentId);
         var saved = await ApproveScheduleAsync(request.TournamentId, request.Schedule);
         return Ok(new { savedScheduleId = saved.Id, savedAt = saved.CreatedAt });
     }

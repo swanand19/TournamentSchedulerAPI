@@ -52,6 +52,8 @@ public class KnockoutService : ServiceBase, IKnockoutService
     private readonly ITournamentContext _context;
     private readonly TimeProvider _clock;
 
+    private readonly Clubs.IClubEntryService _entries;
+
     public KnockoutService(
         IDataService<Tournament> tournaments,
         IDataService<KnockoutFixture> fixtures,
@@ -62,8 +64,10 @@ public class KnockoutService : ServiceBase, IKnockoutService
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         ITournamentContext context,
-        TimeProvider clock)
+        TimeProvider clock,
+        Clubs.IClubEntryService entries)
     {
+        _entries = entries;
         _tournaments = tournaments;
         _fixtures = fixtures;
         _matches = matches;
@@ -355,6 +359,7 @@ public class KnockoutService : ServiceBase, IKnockoutService
         foreach (var planned in preset.Fixtures)
             AddFixture(stage, planned.Round, planned.Label, planned.Home, planned.Away, planned.Order);
 
+        await _entries.CloseAsync(tournamentId); // the teams are drawn into a bracket: entries close (C-10)
         return await SaveAndPresent(tournamentId);
     }
 

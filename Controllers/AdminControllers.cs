@@ -156,7 +156,7 @@ public class AdminUsersController : ApiController
         Respond(await _users.ResetPasswordAsync(userId));
 }
 
-/// <summary>Every tournament, paged: Live, Upcoming, Past — and reopening one closed by mistake.</summary>
+/// <summary>Every tournament, paged: Live, Upcoming, Past — reopening one closed by mistake, and hiding one from the public.</summary>
 [ApiController]
 [Route("api/admin/tournaments")]
 [DefaultRoles(RoleIds.Admin)]
@@ -182,6 +182,12 @@ public class AdminTournamentsController : ApiController
     [ServiceRequestId("ADMIN_TOURNAMENT_REOPEN")]
     public async Task<ActionResult<ApiResponse<AdminTournamentDto>>> Reopen(int id, [FromBody] ReopenTournamentRequest request) =>
         Respond(await _tournaments.ReopenAsync(id, request));
+
+    // PUT api/admin/tournaments/5/hidden — { hidden }: the takedown; every tournament is public otherwise
+    [HttpPut("{id}/hidden")]
+    [ServiceRequestId("ADMIN_TOURNAMENT_HIDE")]
+    public async Task<ActionResult<ApiResponse<AdminTournamentDto>>> SetHidden(int id, [FromBody] HideTournamentRequest request) =>
+        Respond(await _tournaments.SetHiddenAsync(id, request.Hidden));
 }
 
 /// <summary>The wording of every message the system sends — codes, invites, notifications (phase 6D).</summary>

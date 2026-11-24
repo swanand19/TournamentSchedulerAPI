@@ -83,7 +83,7 @@ public class CricketMatchQueryService : ServiceBase, ICricketMatchQueryService
                 t.Id,
                 t.Name,
                 t.DefaultCaptainPlayerId,
-                Players = t.Players.Select(p => new
+                Players = t.Players.Where(p => p.LeftOn == null).Select(p => new
                 {
                     p.Id,
                     p.Name,
@@ -130,7 +130,7 @@ public class CricketMatchQueryService : ServiceBase, ICricketMatchQueryService
 
         if (previous == null) return null;
 
-        var stillHere = team.Players.Select(p => p.Id).ToHashSet();
+        var stillHere = team.Players.Where(p => p.LeftOn == null).Select(p => p.Id).ToHashSet();
 
         return new
         {

@@ -19,6 +19,16 @@ public static class PublicCodes
         return new string(code);
     }
 
+    /// <summary>A code no tournament has yet (a clash is about one in a trillion, so this loops once in practice).</summary>
+    public static async Task<string> UnusedAsync(Data.DataServices.IDataService<Models.Tournament> tournaments)
+    {
+        while (true)
+        {
+            var code = New();
+            if (!await tournaments.AnyAsync(t => t.PublicCode == code)) return code;
+        }
+    }
+
     /// <summary>
     /// The code from what someone pasted: the code itself ("abcd 2345") or the whole link
     /// (".../live/ABCD2345?x"). Null when it can't be one.

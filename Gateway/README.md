@@ -165,5 +165,9 @@ dotnet run -- gateway-keys ensure    # make one only if there is none (Setup-Iis
 ## Known limits
 
 - The replay cache is in memory — right for one API instance; several would need a shared store.
-- One ECDH per request (a few ms in pure JS on a phone). A per-session key could be negotiated later.
+- One ECDH per request, in pure JS in the apps. Since 2026-11-13 all three copies keep a small
+  multiplication table for the server's key (about 3.5× quicker per agreement, same result), and the
+  phone agrees a few keys ahead of time while idle (`gateway.ts`'s pool — each still used for one
+  request only) and opens answers with expo-crypto's native AES-GCM, falling back to the JS copy. A
+  per-session key could be negotiated later.
 - The header is readable in transit (service id, device id, journey id); the payload and answer are not.

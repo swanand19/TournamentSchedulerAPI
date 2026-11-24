@@ -31,11 +31,17 @@ public static class MatchQueries
 {
     public static IQueryable<Match> WithSquad(IQueryable<Match> q) => q.Include(m => m.MatchPlayers);
 
-    /// <summary>Both teams with their players, and the match squad: everything the match screen draws.</summary>
+    /// <summary>
+    /// Both teams with their players, and the match squad: everything the match screen draws.
+    /// Split into one query per collection: in a single query SQL Server multiplies the three lists
+    /// together (11 × 11 × 22 players is 2,662 wide rows for 44 people), sorts them, and asks for the
+    /// memory to do it — on a small server that request alone can queue the screen behind other work.
+    /// </summary>
     public static IQueryable<Match> ForMatchScreen(IQueryable<Match> q) => q
         .Include(m => m.HomeTeam).ThenInclude(t => t!.Players)
         .Include(m => m.AwayTeam).ThenInclude(t => t!.Players)
-        .Include(m => m.MatchPlayers);
+        .Include(m => m.MatchPlayers)
+        .AsSplitQuery();
 
     /// <summary>With the knockout fixture it plays (its round), for the champion and the knockout stage.</summary>
     public static IQueryable<Match> WithKnockoutFixture(IQueryable<Match> q) => q.Include(m => m.KnockoutFixture);
@@ -61,4 +67,10 @@ public static class CricketMatchQueries
         .Include(m => m.Innings).ThenInclude(i => i.Balls)
         .Include(m => m.Innings).ThenInclude(i => i.Interruptions)
         .AsSplitQuery();
+}
+
+/// <summary>Lasting teams' entries (2026-11-21): an entry with its ticked players.</summary>
+public static class EntryQueries
+{
+    public static IQueryable<Models.Clubs.TournamentEntry> WithPlayers(IQueryable<Models.Clubs.TournamentEntry> q) => q.Include(e => e.Players);
 }

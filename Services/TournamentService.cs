@@ -9,6 +9,7 @@ using TournamentScheduler.Api.Services.Access;
 using TournamentScheduler.Api.Models.Public;
 using TournamentScheduler.Api.Services.Knockouts;
 using Microsoft.Extensions.Options;
+using TournamentScheduler.Api.Pictures;
 
 namespace TournamentScheduler.Api.Services;
 
@@ -49,6 +50,17 @@ public class TournamentService : ServiceBase, ITournamentService
     private readonly IKnockoutService _knockouts;
     private readonly IDataService<TournamentFollow> _follows;
     private readonly IOptions<PublicOptions> _public;
+    private readonly IDataService<Models.Auctions.PoolPlayer> _pool;
+    private readonly IDataService<Models.Auctions.AuctionTeam> _bidders;
+    private readonly IDataService<TeamAdmin> _teamAdmins;
+    private readonly IDataService<Models.Clubs.ClubAdmin> _clubAdmins;
+    private readonly Notifications.INotifier _notifier;
+    private readonly Clubs.IClubEntryService _clubEntries;
+    private readonly Auctions.IAuctionService _auctions;
+    private readonly Auctions.IDrawService _draws;
+    private readonly PictureLinks _pictureLinks;
+    private readonly IPictureStore _pictureStore;
+    private readonly Leagues.ILeagueService _leagues;
 
     public TournamentService(
         IDataService<Tournament> tournaments,
@@ -64,8 +76,30 @@ public class TournamentService : ServiceBase, ITournamentService
         TimeProvider clock,
         IKnockoutService knockouts,
         IDataService<TournamentFollow> follows,
-        IOptions<PublicOptions> publicOptions)
+        IOptions<PublicOptions> publicOptions,
+        IDataService<Models.Auctions.PoolPlayer> pool,
+        IDataService<Models.Auctions.AuctionTeam> bidders,
+        IDataService<TeamAdmin> teamAdmins,
+        IDataService<Models.Clubs.ClubAdmin> clubAdmins,
+        Notifications.INotifier notifier,
+        Clubs.IClubEntryService clubEntries,
+        Auctions.IAuctionService auctions,
+        Auctions.IDrawService draws,
+        PictureLinks pictureLinks,
+        IPictureStore pictureStore,
+        Leagues.ILeagueService leagues)
     {
+        _leagues = leagues;
+        _pictureLinks = pictureLinks;
+        _pictureStore = pictureStore;
+        _pool = pool;
+        _bidders = bidders;
+        _teamAdmins = teamAdmins;
+        _clubAdmins = clubAdmins;
+        _notifier = notifier;
+        _clubEntries = clubEntries;
+        _auctions = auctions;
+        _draws = draws;
         _follows = follows;
         _public = publicOptions;
         _tournaments = tournaments;
@@ -84,7 +118,7 @@ public class TournamentService : ServiceBase, ITournamentService
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
-    /// <summary>Only the caller's own tournaments: ones they created, own, score, play in or follow.</summary>
+    /// <summary>Only the caller's own tournaments: ones they created, own, score, play in, run a team in or follow.</summary>
     public async Task<ServiceResult<object>> GetAllAsync(Sport? sport)
     {
         var me = _currentUser.UserId;
@@ -95,12 +129,24 @@ public class TournamentService : ServiceBase, ITournamentService
         var playsIn = (await _players.QueryAsync(q => q
             .Where(p => p.UserId == me)
             .Select(p => p.TournamentId), tracking: false)).ToHashSet();
-        // Followed ones while they stay public (6E).
+        // Followed ones, unless an admin has hidden them (6E).
         var followIds = await _follows.QueryAsync(q => q.Where(f => f.UserId == me).Select(f => f.TournamentId), tracking: false);
         var follows = (await _tournaments.QueryAsync(q => q
             .Where(t => followIds.Contains(t.Id) && t.IsPublic)
             .Select(t => t.Id), tracking: false)).ToHashSet();
-        var ids = roleIn.Keys.Concat(playsIn).Concat(follows).Distinct().ToList();
+        // In a player pool, or bidding for a team, before the squads are made (2026-11-17).
+        var inAuction = (await _pool.QueryAsync(q => q.Where(p => p.UserId == me).Select(p => p.TournamentId), tracking: false))
+            .Concat(await _bidders.QueryAsync(q => q.Where(b => b.BidderUserId == me).Select(b => b.TournamentId), tracking: false))
+            .ToHashSet();
+        // Running a team (2026-11-20).
+        var runsTeamIn = (await _teamAdmins.QueryAsync(q => q.Where(a => a.UserId == me && !a.IsDisabled).Select(a => a.TournamentId), tracking: false)).ToHashSet();
+        // …or running the lasting team that one of its squads belongs to.
+        var myClubs = await _clubAdmins.QueryAsync(q => q.Where(a => a.UserId == me && !a.IsDisabled).Select(a => a.ClubId), tracking: false);
+        if (myClubs.Count > 0)
+            runsTeamIn.UnionWith(await _teams.QueryAsync(q => q
+                .Where(t => t.ClubId != null && myClubs.Contains(t.ClubId.Value))
+                .Select(t => t.TournamentId), tracking: false));
+        var ids = roleIn.Keys.Concat(playsIn).Concat(follows).Concat(inAuction).Concat(runsTeamIn).Distinct().ToList();
 
         var tournaments = await _tournaments.QueryAsync(q =>
         {
@@ -121,6 +167,8 @@ public class TournamentService : ServiceBase, ITournamentService
                     t.StartDate,
                     t.EndDate,
                     t.CreatedByUserId,
+                    t.LogoId,
+                    t.LeagueId,
                     HasSchedule = t.Schedules.Any(),
                     LatestScheduleId = t.Schedules
                         .OrderByDescending(s => s.CreatedAt)
@@ -128,6 +176,9 @@ public class TournamentService : ServiceBase, ITournamentService
                         .FirstOrDefault()
                 });
         }, tracking: false);
+
+        // "Season 3 · Live" on Home's rows (leagues, 2026-11-24).
+        var leagues = await _leagues.BadgesAsync(tournaments.Where(t => t.LeagueId != null).Select(t => t.Id).ToList());
 
         return Ok(tournaments.Select(t => new
         {
@@ -141,11 +192,15 @@ public class TournamentService : ServiceBase, ITournamentService
             t.EndDate,
             t.HasSchedule,
             t.LatestScheduleId,
-            MyRoles = RolesOf(t.CreatedByUserId == me, roleIn.TryGetValue(t.Id, out var role) ? role : null, playsIn.Contains(t.Id), follows.Contains(t.Id))
+            LogoUrl = _pictureLinks.For(t.LogoId),
+            League = leagues.GetValueOrDefault(t.Id),
+            MyRoles = RolesOf(t.CreatedByUserId == me, roleIn.TryGetValue(t.Id, out var role) ? role : null, playsIn.Contains(t.Id), follows.Contains(t.Id),
+                inAuction.Contains(t.Id), runsTeamIn.Contains(t.Id))
         }).ToList());
     }
 
-    private static List<string> RolesOf(bool isCreator, TournamentMemberRole? role, bool plays, bool follows = false)
+    private static List<string> RolesOf(bool isCreator, TournamentMemberRole? role, bool plays, bool follows = false, bool inAuction = false,
+        bool runsTeam = false)
     {
         var roles = new List<string>();
         if (isCreator) roles.Add("creator");
@@ -153,6 +208,8 @@ public class TournamentService : ServiceBase, ITournamentService
         else if (role == TournamentMemberRole.Scorer) roles.Add("scorer");
         if (plays) roles.Add("player");
         if (follows) roles.Add("follower");
+        if (inAuction && !plays) roles.Add("auction");
+        if (runsTeam) roles.Add("teamAdmin");
         return roles;
     }
 
@@ -169,9 +226,12 @@ public class TournamentService : ServiceBase, ITournamentService
     {
         tournament.Access = await AccessFor(tournament);
         tournament.Share = ShareFor(tournament, _public.Value);
+        tournament.LogoUrl = _pictureLinks.For(tournament.LogoId);
+        tournament.BannerUrl = _pictureLinks.For(tournament.BannerId);
+        tournament.League = tournament.LeagueId == null ? null : await _leagues.BadgeAsync(tournament.Id, withLine: true);
     }
 
-    /// <summary>The public link (6E) while it is public; the whole address when the server knows where the web app is.</summary>
+    /// <summary>The public link (6E) unless an admin has hidden it; the whole address when the server knows where the web app is.</summary>
     public static PublicShareDto? ShareFor(Tournament tournament, PublicOptions options)
     {
         if (!tournament.IsPublic || tournament.PublicCode is not { } code) return null;
@@ -187,7 +247,9 @@ public class TournamentService : ServiceBase, ITournamentService
 
         return new TournamentAccessDto
         {
-            MyRoles = RolesOf(_context.IsCreator, _context.Role, _context.MyPlace != null, _context.IsFollower),
+            MyRoles = RolesOf(_context.IsCreator, _context.Role, _context.MyPlace != null, _context.IsFollower, _context.IsInAuction,
+                _context.AdminOfTeamIds.Count > 0),
+            ManagedTeamIds = _context.AdminOfTeamIds.Order().ToList(),
             MyPlayerId = _context.MyPlace?.PlayerId,
             MyTeamId = _context.MyPlace?.TeamId,
             CanEdit = _context.IsOwner && !closed,
@@ -231,15 +293,23 @@ public class TournamentService : ServiceBase, ITournamentService
             && TournamentDates.Problem(request.StartDate, request.EndDate, Tournament.DefaultTimeZoneId, now) is { } problem)
             return BadRequest(problem);
 
+        // "Start Season 4": only the league's organisers, and only in the league's sport.
+        if (request.LeagueId is int leagueId && await _leagues.SeasonProblemAsync(leagueId, request.Sport) is { } seasonProblem)
+            return seasonProblem;
+
         var me = _currentUser.UserId;
         var tournament = new Tournament
         {
+            LeagueId = request.LeagueId,
             Name = name,
             Sport = request.Sport,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
             CreatedByUserId = me,
-            Status = TournamentStatus.Upcoming
+            Status = TournamentStatus.Upcoming,
+            // Every tournament is public (2026-11-23): its link exists from the start, though search lists it only
+            // once its schedule or knockout stage is approved.
+            PublicCode = await Public.PublicCodes.UnusedAsync(_tournaments)
         };
         _tournaments.Add(tournament);
         await _unitOfWork.SaveChangesAsync();
@@ -255,6 +325,8 @@ public class TournamentService : ServiceBase, ITournamentService
             MyRoles = RolesOf(true, TournamentMemberRole.Owner, false),
             CanEdit = true, CanScore = true, CanManageMembers = true, CanDelete = true
         };
+        tournament.Share = ShareFor(tournament, _public.Value);
+        if (tournament.LeagueId != null) tournament.League = await _leagues.BadgeAsync(tournament.Id, withLine: true);
         return Success(tournament);
     }
 
@@ -294,6 +366,7 @@ public class TournamentService : ServiceBase, ITournamentService
         tournament.Status = TournamentStatus.Completed;
         tournament.CompletedAt = Now;
         tournament.CompletedByUserId = _currentUser.UserId;
+        await _notifier.AskToKeepTeamsAsync(tournament.Id, tournament.Name);
         await _unitOfWork.SaveChangesAsync();
 
         await DescribeAsync(tournament);
@@ -305,8 +378,10 @@ public class TournamentService : ServiceBase, ITournamentService
         var tournament = await _tournaments.GetByIdAsync(id);
         if (tournament == null) return NotFound();
 
+        var pictures = new[] { tournament.LogoId, tournament.BannerId };
         _tournaments.Remove(tournament); // cascades to schedules, teams, matches and members
         await _unitOfWork.SaveChangesAsync();
+        foreach (var picture in pictures) _pictureStore.Delete(picture);
         return Success(true);
     }
 
@@ -373,6 +448,11 @@ public class TournamentService : ServiceBase, ITournamentService
 
         if (tournament.IsStarted)
             return BadRequest("Tournament has already been started.");
+
+        if (await _auctions.StartProblemAsync(id) is { } auctionProblem)
+            return Conflict(auctionProblem);
+        if (await _draws.StartProblemAsync(id) is { } drawProblem)
+            return Conflict(drawProblem);
 
         // Approving a schedule sets them; a schedule approved before dates existed didn't.
         if (tournament.StartDate == null || tournament.EndDate == null)
@@ -446,6 +526,7 @@ public class TournamentService : ServiceBase, ITournamentService
         tournament.IsStarted = true;
         tournament.StartedAt = DateTime.UtcNow;
         tournament.Status = TournamentStatus.Live;
+        await _clubEntries.CloseAsync(id); // nothing enters a started tournament by code
         await _unitOfWork.SaveChangesAsync();
 
         // After the group matches exist, so the knockout matches are numbered after them.

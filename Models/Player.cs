@@ -65,6 +65,10 @@ public class Player
     [NotMapped]
     public bool IsMe { get; set; }
 
+    /// <summary>The linked person's profile photo (a signed, expiring link; HLD P-26). Never on public pages.</summary>
+    [NotMapped]
+    public string? PhotoUrl { get; set; }
+
     /// <summary>The email, for the tournament's owners only — filled per request, null for everyone else.</summary>
     [NotMapped]
     public string? Email { get; set; }
@@ -72,6 +76,22 @@ public class Player
     /// <summary>The mobile number, for the tournament's owners only — filled per request, null for everyone else.</summary>
     [NotMapped]
     public string? Phone { get; set; }
+
+    /// <summary>
+    /// When the player was left out of the squad after they had played (2026-11-20). Their goals, balls and cards
+    /// point at this row, so it stays: it leaves the squad and every picker, but scorecards, stats and their
+    /// profile keep it. A player who never played is simply deleted instead. Teams answer these separately
+    /// as <c>leftPlayers</c>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTime? LeftOn { get; set; }
+
+    /// <summary>The club player this squad place came from, when its team is a lasting team (step 2 of the lasting-teams plan).</summary>
+    [JsonIgnore]
+    public int? ClubPlayerId { get; set; }
+
+    [JsonIgnore]
+    public Clubs.ClubPlayer? ClubPlayer { get; set; }
 
     /// <summary>Null for a football player, and for a cricketer who has not filled it in.</summary>
     public PlayerCricketProfile? Cricket { get; set; }

@@ -48,10 +48,21 @@ dotnet publish (Join-Path $apiDir "TournamentScheduler.Api.csproj") -c Release -
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed; nothing was deployed." }
 Remove-Item (Join-Path $out "appsettings.Development.json") -ErrorAction SilentlyContinue
 $zip = Join-Path $work "api.zip"
-Compress-Archive -Path (Join-Path $out "*") -DestinationPath $zip
+# Not Compress-Archive: Windows PowerShell 5.1's version writes "runtimes\unix\..." with backslashes, which
+# Linux unpacks as single odd file names (the SQL driver's Linux build would go missing). Entries use "/".
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::Open($zip, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    $base = (Resolve-Path $out).Path.TrimEnd('\') + '\'
+    foreach ($file in Get-ChildItem $out -Recurse -File) {
+        $entry = $file.FullName.Substring($base.Length).Replace('\', '/')
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $entry, [System.IO.Compression.CompressionLevel]::Optimal)
+    }
+}
+finally { $archive.Dispose() }
 
 Write-Host "3/4 Uploading to $AppName (the API restarts)..." -ForegroundColor Cyan
-az webapp deploy --resource-group $ResourceGroup --name $AppName --src-path $zip --type zip --output none
+az webapp deploy --resource-group $ResourceGroup --name $AppName --src-path $zip --type zip --output none --only-show-errors
 if ($LASTEXITCODE -ne 0) { throw "The upload failed. The previous release is still running." }
 
 Write-Host "4/4 Health check..." -ForegroundColor Cyan

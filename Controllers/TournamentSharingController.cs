@@ -12,8 +12,8 @@ using TournamentScheduler.Api.Services.Public;
 namespace TournamentScheduler.Api.Controllers;
 
 /// <summary>
-/// Public live scores (6E), the signed-in side: owners switch a tournament public or not; anyone
-/// signed in finds public ones by name or code and follows them, and stops.
+/// Public live scores (6E), the signed-in side: anyone signed in finds tournaments by name or code and
+/// follows them, and stops. Every tournament is public since 2026-11-23, so owners have no switch any more.
 /// </summary>
 [ApiController]
 [DefaultRoles(RoleIds.EndUser)]
@@ -22,13 +22,6 @@ public class TournamentSharingController : ApiController
     private readonly ITournamentSharingService _sharing;
 
     public TournamentSharingController(ITournamentSharingService sharing) => _sharing = sharing;
-
-    // POST api/tournaments/5/public — { isPublic }: "anyone with the link can watch"; answers the tournament with its link
-    [HttpPost("api/tournaments/{id}/public")]
-    [ServiceRequestId("TOURNAMENT_PUBLIC_SET")]
-    [TournamentAccess(TournamentPermission.ManageMembers)]
-    public async Task<ActionResult<ApiResponse<Tournament>>> SetPublic(int id, [FromBody] SetPublicRequest request) =>
-        Respond(await _sharing.SetPublicAsync(id, request.IsPublic));
 
     // GET api/follows/search?q= — public tournaments by name (3+ letters) or code; limited per address like the public pages
     [HttpGet("api/follows/search")]
@@ -45,7 +38,7 @@ public class TournamentSharingController : ApiController
     public async Task<ActionResult<ApiResponse<FollowedDto>>> Follow([FromBody] FollowRequest request) =>
         Respond(await _sharing.FollowAsync(request.Code));
 
-    // DELETE api/follows/5 — stop following (works after it stops being public too)
+    // DELETE api/follows/5 — stop following (works after an admin hides it too)
     [HttpDelete("api/follows/{tournamentId}")]
     [ServiceRequestId("FOLLOW_REMOVE")]
     [NotTournamentScoped]

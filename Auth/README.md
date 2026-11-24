@@ -359,7 +359,7 @@ pre-accounts data and is `CrdBy` on seeded and synced rows.
 "Smtp": {
   "Host": "smtp.gmail.com", "Port": 587, "EnableSsl": true,
   "UserName": "you@gmail.com", "Password": "<app password>",
-  "FromAddress": "you@gmail.com", "FromName": "Tournament Scheduler"
+  "FromAddress": "you@gmail.com", "FromName": "KickCricket"
 },
 "Sms": {
   "Provider": "None"               // "Log" to test numbers; a real provider once chosen

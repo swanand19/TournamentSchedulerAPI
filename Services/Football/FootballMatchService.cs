@@ -16,6 +16,7 @@ public class FootballMatchService : ServiceBase, IFootballMatchService
     private readonly IDataService<MatchEvent> _events;
     private readonly IDataService<MatchPlayer> _squad;
     private readonly IDataService<PenaltyKick> _kicks;
+    private readonly IDataService<Player> _players;
     private readonly IUnitOfWork _unitOfWork;
 
     public FootballMatchService(
@@ -23,12 +24,14 @@ public class FootballMatchService : ServiceBase, IFootballMatchService
         IDataService<MatchEvent> events,
         IDataService<MatchPlayer> squad,
         IDataService<PenaltyKick> kicks,
+        IDataService<Player> players,
         IUnitOfWork unitOfWork)
     {
         _matches = matches;
         _events = events;
         _squad = squad;
         _kicks = kicks;
+        _players = players;
         _unitOfWork = unitOfWork;
     }
 
@@ -91,6 +94,17 @@ public class FootballMatchService : ServiceBase, IFootballMatchService
             return BadRequest("Every squad entry must belong to one of the two teams in this match.");
         if (request.Squad.GroupBy(s => s.PlayerId).Any(g => g.Count() > 1))
             return BadRequest("A player can only appear once in the squad selection.");
+
+        // Everyone named must be in that team's squad now: not another team's, not someone left out (2026-11-20).
+        var named = request.Squad.Select(s => s.PlayerId).ToList();
+        var places = await _players.QueryAsync(q => q.Where(p => named.Contains(p.Id)).Select(p => new { p.Id, p.TeamId, p.Name, p.LeftOn }), tracking: false);
+        foreach (var s in request.Squad)
+        {
+            var place = places.FirstOrDefault(p => p.Id == s.PlayerId);
+            if (place == null) continue; // the database's own link refuses an id that isn't a player
+            if (place.TeamId != s.TeamId) return BadRequest($"{place.Name} doesn't play for that team.");
+            if (place.LeftOn != null) return BadRequest($"{place.Name} has left the squad, so they can't be picked.");
+        }
 
         var homeStarting = request.Squad.Count(s => s.TeamId == match.HomeTeamId && s.SquadStatus == SquadStatus.Starting);
         var awayStarting = request.Squad.Count(s => s.TeamId == match.AwayTeamId && s.SquadStatus == SquadStatus.Starting);

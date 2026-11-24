@@ -59,6 +59,8 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
     private readonly IDataService<Team> _teams;
     private readonly INotifier _notifier;
     private readonly ICurrentUser _currentUser;
+    private readonly IDataService<Models.Auctions.PoolPlayer> _pool;
+    private readonly IDataService<Models.Clubs.ClubPlayer> _clubPlayers;
 
     public PlayerLinkService(
         IDataService<Player> players,
@@ -67,8 +69,12 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
         IDataService<UserCricketProfile> profiles,
         IDataService<Team> teams,
         INotifier notifier,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        IDataService<Models.Auctions.PoolPlayer> pool,
+        IDataService<Models.Clubs.ClubPlayer> clubPlayers)
     {
+        _clubPlayers = clubPlayers;
+        _pool = pool;
         _players = players;
         _users = users;
         _tournaments = tournaments;
@@ -115,7 +121,13 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
         }
 
         if (user != null && await TeamAlreadyInAsync(tournamentId, user.UserId, place.Id) is { } team)
-            return Conflict($"{user.Name} is already in {team} in this tournament.");
+        {
+            // Someone left out after playing (2026-11-20) still holds their one place here.
+            var left = await _players.AnyAsync(p => p.TournamentId == tournamentId && p.UserId == user.UserId && p.Id != place.Id && p.LeftOn != null);
+            return Conflict(left
+                ? $"{user.Name} played for {team} earlier in this tournament. Bring them back from that team's left players instead."
+                : $"{user.Name} is already in {team} in this tournament.");
+        }
 
         Unlink(place);
         place.EmailId = newEmail;
@@ -174,6 +186,23 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
 
         var email = user.EmailId;
         var phone = user.PhoneNumber;
+
+        // Player pools wait for accounts the same way (2026-11-17): one pool place per person per tournament.
+        var waitingInPools = await _pool.ListAsync(p => p.UserId == null && ((email != null && p.EmailId == email) || (phone != null && p.PhoneNumber == phone)));
+        if (waitingInPools.Count > 0)
+        {
+            var poolIds = waitingInPools.Select(p => p.TournamentId).Distinct().ToList();
+            var inPool = (await _pool.QueryAsync(q => q.Where(p => p.UserId == user.UserId && poolIds.Contains(p.TournamentId)).Select(p => p.TournamentId), tracking: false)).ToHashSet();
+            foreach (var p in waitingInPools.OrderBy(p => p.Id))
+            {
+                if (!inPool.Add(p.TournamentId)) continue;
+                p.UserId = user.UserId;
+                p.Name = user.Name;
+                p.EmailId = user.EmailId;
+            }
+        }
+        await LinkWaitingClubPlacesAsync(user);
+
         var waiting = await _players.ListAsync(
             p => p.UserId == null && ((email != null && p.EmailId == email) || (phone != null && p.PhoneNumber == phone)),
             q => Data.Queries.PlayerQueries.WithCricketProfile(q).OrderBy(p => p.Id));
@@ -203,8 +232,47 @@ public class PlayerLinkService : ServiceBase, IPlayerLinkService
         return linked;
     }
 
+    /// <summary>
+    /// Lasting teams' players waiting on this email or number (2026-11-20): linked now, one place per person per club, the
+    /// account's name and (cricket) profile copied as on a squad place.
+    /// </summary>
+    private async Task LinkWaitingClubPlacesAsync(User user)
+    {
+        var email = user.EmailId;
+        var phone = user.PhoneNumber;
+        var waiting = await _clubPlayers.ListAsync(p => p.UserId == null && ((email != null && p.EmailId == email) || (phone != null && p.PhoneNumber == phone)));
+        if (waiting.Count == 0) return;
+
+        var clubIds = waiting.Select(p => p.ClubId).Distinct().ToList();
+        var inClub = (await _clubPlayers.QueryAsync(q => q.Where(p => p.UserId == user.UserId && clubIds.Contains(p.ClubId)).Select(p => p.ClubId), tracking: false)).ToHashSet();
+        var mine = await _profiles.GetByIdAsync(user.UserId);
+        foreach (var place in waiting.OrderBy(p => p.ClubPlayerId))
+        {
+            if (!inClub.Add(place.ClubId)) continue;
+            place.UserId = user.UserId;
+            place.EmailId = user.EmailId;
+            place.Name = user.Name;
+            if (mine != null && place.Cricket != null) CricketProfiles.Copy(mine, place.Cricket);
+        }
+    }
+
     public async Task FollowAccountAsync(User user, UserCricketProfile? profile)
     {
+        // A lasting team's players show their person's name and profile too.
+        foreach (var p in await _clubPlayers.ListAsync(p => p.UserId == user.UserId))
+        {
+            p.Name = user.Name;
+            p.EmailId = user.EmailId;
+            if (profile != null && p.Cricket != null) CricketProfiles.Copy(profile, p.Cricket);
+        }
+
+        // A pool place shows its person's name too, until it becomes a squad place.
+        foreach (var p in await _pool.ListAsync(p => p.UserId == user.UserId && p.PlayerId == null))
+        {
+            p.Name = user.Name;
+            p.EmailId = user.EmailId;
+        }
+
         var places = await _players.ListAsync(p => p.UserId == user.UserId, Data.Queries.PlayerQueries.WithCricketProfile);
         if (places.Count == 0) return;
 

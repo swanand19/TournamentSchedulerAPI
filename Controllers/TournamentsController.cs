@@ -19,12 +19,15 @@ public class TournamentsController : ApiController
     private readonly ITournamentService _tournaments;
     private readonly IStatsService _stats;
     private readonly ICricketStatsService _cricketStats;
+    private readonly IPlayerMatchLinesService _playerLines;
 
-    public TournamentsController(ITournamentService tournaments, IStatsService stats, ICricketStatsService cricketStats)
+    public TournamentsController(ITournamentService tournaments, IStatsService stats, ICricketStatsService cricketStats,
+        IPlayerMatchLinesService playerLines)
     {
         _tournaments = tournaments;
         _stats = stats;
         _cricketStats = cricketStats;
+        _playerLines = playerLines;
     }
 
     // GET api/tournaments/5/stats — every leaderboard for this tournament
@@ -48,6 +51,14 @@ public class TournamentsController : ApiController
         if (stats == null) return NotFound("Tournament not found.");
         return Ok(stats);
     }
+
+    // GET api/tournaments/5/stats/players/12 — what a leaderboard row unfolds into: that player's
+    // innings and spells (cricket) or goals and assists (football), match by match
+    [HttpGet("{id}/stats/players/{playerId}")]
+    [ServiceRequestId("TOURNAMENT_PLAYER_LINES")]
+    [TournamentAccess(TournamentPermission.View)]
+    public async Task<ActionResult<ApiResponse<PlayerMatchLines>>> GetPlayerLines(int id, int playerId) =>
+        Respond(await _playerLines.GetAsync(id, playerId));
 
     // GET api/tournaments            — every tournament
     // GET api/tournaments?sport=Cricket — just that sport's, for the home page tabs

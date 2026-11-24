@@ -71,7 +71,7 @@ template serves sign-in, adding a number and deleting the account.
 - Body (the four values, in this order, are `InviteParameters`):
 
   ```
-  {{1}} has invited you to be {{2}} of {{3}} on Tournament Scheduler.
+  {{1}} has invited you to be {{2}} of {{3}} on KickCricket.
 
   Sign up in the app with this mobile number before {{4}} and you'll be added straight away.
   ```

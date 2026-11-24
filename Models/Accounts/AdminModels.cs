@@ -196,6 +196,9 @@ public class AdminTournamentDto
 
     /// <summary>Completed or cancelled: an admin can open it again (for mistakes).</summary>
     public bool CanReopen { get; set; }
+
+    /// <summary>Hidden from the public by an admin: no link, no search, followers shut out. Every other tournament is public.</summary>
+    public bool Hidden { get; set; }
 }
 
 public class AdminTournamentPage : PagedResult<AdminTournamentDto>
@@ -211,4 +214,10 @@ public class AdminTournamentPage : PagedResult<AdminTournamentDto>
 public class ReopenTournamentRequest
 {
     public DateOnly? EndDate { get; set; }
+}
+
+/// <summary>An admin's takedown of a tournament's public pages (or undoing it).</summary>
+public class HideTournamentRequest
+{
+    public bool Hidden { get; set; }
 }

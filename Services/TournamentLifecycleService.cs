@@ -61,6 +61,7 @@ public class TournamentLifecycleService : ServiceBase, ITournamentLifecycleServi
                 tournament.Status = TournamentStatus.Completed;
                 tournament.CompletedAt = now;
                 tournament.CompletedByUserId = SystemUser.Id;
+                await _notifier.AskToKeepTeamsAsync(tournament.Id, tournament.Name);
                 completed++;
             }
             else

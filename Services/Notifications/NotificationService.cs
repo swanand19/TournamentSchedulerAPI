@@ -9,7 +9,8 @@ namespace TournamentScheduler.Api.Services.Notifications;
 
 public interface INotificationService
 {
-    Task<ServiceResult<NotificationPageDto>> ListAsync(long? before, int? take);
+    /// <summary>A page of the inbox; <paramref name="category"/> (Social, Scoring, Tournaments, Teams) narrows it to one chip.</summary>
+    Task<ServiceResult<NotificationPageDto>> ListAsync(long? before, int? take, string? category = null);
     Task<ServiceResult<UnreadCountDto>> UnreadCountAsync();
     Task<ServiceResult<UnreadCountDto>> MarkReadAsync(long notificationId);
     Task<ServiceResult<UnreadCountDto>> MarkAllReadAsync();
@@ -41,12 +42,13 @@ public class NotificationService(
 
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
 
-    public async Task<ServiceResult<NotificationPageDto>> ListAsync(long? before, int? take)
+    public async Task<ServiceResult<NotificationPageDto>> ListAsync(long? before, int? take, string? category = null)
     {
         var me = currentUser.UserId;
         var size = Math.Clamp(take ?? PageSize, 1, MaxPageSize);
+        var kinds = NotificationCategories.KindsOf(category);
         var rows = await notifications.QueryAsync(q => q
-            .Where(n => n.UserId == me && n.InInbox && (before == null || n.NotificationId < before))
+            .Where(n => n.UserId == me && n.InInbox && (before == null || n.NotificationId < before) && (kinds == null || kinds.Contains(n.Kind)))
             .OrderByDescending(n => n.NotificationId)
             .Take(size + 1)
             .Select(n => new NotificationDto
@@ -58,15 +60,30 @@ public class NotificationService(
                 TournamentId = n.TournamentId,
                 Sport = n.Sport,
                 MatchId = n.MatchId,
+                TeamId = n.TeamId,
+                ClubId = n.ClubId,
+                ClubPlayerId = n.ClubPlayerId,
+                ProfileUserId = n.ProfileUserId,
+                LeagueId = n.LeagueId,
                 CreatedAt = n.CreatedAt,
                 IsRead = n.ReadAt != null
             }), tracking: false);
+        foreach (var row in rows) row.Category = NotificationCategories.Of(row.Kind);
+
+        // Unread per chip: one grouped read of the kinds, folded into the four categories.
+        var unreadKinds = await notifications.QueryAsync(q => q
+            .Where(n => n.UserId == me && n.InInbox && n.ReadAt == null)
+            .GroupBy(n => n.Kind)
+            .Select(g => new { Kind = g.Key, Count = g.Count() }), tracking: false);
+        var byCategory = NotificationCategories.All.ToDictionary(c => c, _ => 0);
+        foreach (var k in unreadKinds) byCategory[NotificationCategories.Of(k.Kind)] += k.Count;
 
         return Success(new NotificationPageDto
         {
             Items = rows.Take(size).ToList(),
             HasMore = rows.Count > size,
-            UnreadCount = await Unread(me)
+            UnreadCount = byCategory.Values.Sum(),
+            UnreadByCategory = byCategory
         });
     }
 

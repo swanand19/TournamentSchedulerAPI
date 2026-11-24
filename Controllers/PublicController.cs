@@ -81,11 +81,29 @@ public class PublicController : ApiController
     public async Task<ActionResult<ApiResponse<JsonNode>>> Stats(string code) =>
         Respond(await _public.StatsAsync(code));
 
+    // GET api/public/ABCD2345/stats/players/12 — as TOURNAMENT_PLAYER_LINES: a leaderboard row unfolded
+    [HttpGet("stats/players/{playerId}")]
+    [ServiceRequestId("PUBLIC_PLAYER_LINES")]
+    public async Task<ActionResult<ApiResponse<JsonNode>>> PlayerLines(string code, int playerId) =>
+        Respond(await _public.PlayerLinesAsync(code, playerId));
+
     // GET api/public/ABCD2345/knockout — the bracket
     [HttpGet("knockout")]
     [ServiceRequestId("PUBLIC_KNOCKOUT")]
     public async Task<ActionResult<ApiResponse<JsonNode>>> Knockout(string code) =>
         Respond(await _public.KnockoutAsync(code));
+
+    // GET api/public/ABCD2345/auction — the player auction, for the TV in the hall (no buttons, nobody's part)
+    [HttpGet("auction")]
+    [ServiceRequestId("PUBLIC_AUCTION")]
+    public async Task<ActionResult<ApiResponse<JsonNode>>> Auction(string code) =>
+        Respond(await _public.AuctionAsync(code));
+
+    // GET api/public/ABCD2345/draw — the team draw, for the TV in the hall
+    [HttpGet("draw")]
+    [ServiceRequestId("PUBLIC_DRAW")]
+    public async Task<ActionResult<ApiResponse<JsonNode>>> Draw(string code) =>
+        Respond(await _public.DrawAsync(code));
 
     // GET api/public/ABCD2345/players/12 — a player's name and sport cards
     [HttpGet("players/{playerId}")]

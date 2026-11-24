@@ -16,6 +16,12 @@ public interface IStatsService
 
     /// <summary>The team that won the tournament's Final, once it has been played; null otherwise.</summary>
     Task<int?> ChampionAsync(int tournamentId);
+
+    /// <summary>
+    /// One player's goals and assists in a tournament, match by match, from the completed matches the
+    /// leaderboards count. Shootout kicks aren't goals, as on the boards.
+    /// </summary>
+    Task<(List<PlayerMatchLine> Goals, List<PlayerMatchLine> Assists)> PlayerLinesAsync(int tournamentId, int playerId);
 }
 
 /// <summary>One player's figures from a set of completed matches.</summary>
@@ -134,6 +140,44 @@ public class StatsService : IStatsService
             m => m.TournamentId == tournamentId && m.KnockoutFixtureId != null && m.KnockoutFixture!.Round == Models.Knockouts.KnockoutRound.Final,
             tracking: false);
         return final == null ? null : Knockouts.KnockoutResults.WinnerOf(final);
+    }
+
+    public async Task<(List<PlayerMatchLine> Goals, List<PlayerMatchLine> Assists)> PlayerLinesAsync(int tournamentId, int playerId)
+    {
+        var counted = await _matches.ListAsync(m => m.TournamentId == tournamentId && m.Status == MatchStatus.Completed, tracking: false);
+        var byId = counted.ToDictionary(m => m.Id);
+        var events = await _events.ListAsync(
+            e => byId.Keys.Contains(e.MatchId) && e.EventType == MatchEventType.Goal
+                 && (e.PlayerId == playerId || e.RelatedPlayerId == playerId),
+            tracking: false);
+        if (events.Count == 0) return (new(), new());
+
+        var teams = await _teams.ListAsync(t => t.TournamentId == tournamentId, TeamQueries.WithPlayers, tracking: false);
+        var names = teams.SelectMany(t => t.Players).ToDictionary(p => p.Id, p => p.Name);
+        string NameOf(int? id) => id is int i && names.TryGetValue(i, out var n) ? n : "";
+
+        PlayerMatchLine Line(MatchEvent e, string? detail)
+        {
+            var m = byId[e.MatchId];
+            return new PlayerMatchLine
+            {
+                MatchId = m.Id,
+                MatchNumber = m.MatchNumber,
+                Opponent = e.TeamId == m.HomeTeamId ? m.AwayTeamName : m.HomeTeamName,
+                Value = e.StoppageMinute is int s && s > 0 ? $"{e.MinuteOfMatch}+{s}'" : $"{e.MinuteOfMatch}'",
+                Detail = string.IsNullOrEmpty(detail) ? null : detail
+            };
+        }
+
+        var ordered = events
+            .OrderBy(e => byId[e.MatchId].MatchNumber)
+            .ThenBy(e => e.MinuteOfMatch).ThenBy(e => e.StoppageMinute ?? 0).ThenBy(e => e.Id)
+            .ToList();
+        var goals = ordered.Where(e => e.PlayerId == playerId)
+            .Select(e => Line(e, NameOf(e.RelatedPlayerId) is { Length: > 0 } a ? $"from {a}" : null)).ToList();
+        var assists = ordered.Where(e => e.RelatedPlayerId == playerId)
+            .Select(e => Line(e, NameOf(e.PlayerId) is { Length: > 0 } g ? $"for {g}" : null)).ToList();
+        return (goals, assists);
     }
 
     public async Task<Dictionary<int, FootballPlayerFigures>> PlayerFiguresAsync(int tournamentId)

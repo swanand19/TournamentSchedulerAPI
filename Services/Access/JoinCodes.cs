@@ -10,21 +10,28 @@ namespace TournamentScheduler.Api.Services.Access;
 public static class JoinCodes
 {
     public const int Length = 6;
+
+    /// <summary>A lasting team's join code (2026-11-20): eight, so the one Join field tells it from a team's six and a pool's seven.</summary>
+    public const int ClubLength = 8;
+
+    /// <summary>A tournament's entry code (2026-11-21): nine, so a lasting team's admin who types it under Join is told where it goes.</summary>
+    public const int EntryLength = 9;
+
     public const string Alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-    public static string New()
+    public static string New(int length = Length)
     {
-        Span<char> code = stackalloc char[Length];
-        for (var i = 0; i < Length; i++)
+        Span<char> code = stackalloc char[length];
+        for (var i = 0; i < length; i++)
             code[i] = Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)];
         return new string(code);
     }
 
     /// <summary>Upper-case without spaces or dashes ("abc-23x" → "ABC23X"), or null if it can't be a code.</summary>
-    public static string? Normalise(string? typed)
+    public static string? Normalise(string? typed, int length = Length)
     {
         var code = new string((typed ?? "").Where(ch => !char.IsWhiteSpace(ch) && ch != '-').ToArray()).ToUpperInvariant();
-        return code.Length == Length && code.All(Alphabet.Contains) ? code : null;
+        return code.Length == length && code.All(Alphabet.Contains) ? code : null;
     }
 }
 

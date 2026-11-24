@@ -95,6 +95,9 @@ public class AccountDto
     public string? RoleName { get; set; }
     public DateTime MemberSince { get; set; }
 
+    /// <summary>Their profile photo: a signed link that expires (HLD P-26), relative to the API's address. Null without one.</summary>
+    public string? PhotoUrl { get; set; }
+
     /// <summary>Their own cricket profile, copied to every squad place linked to them. Null until they fill it in.</summary>
     public UserCricketProfile? Cricket { get; set; }
 

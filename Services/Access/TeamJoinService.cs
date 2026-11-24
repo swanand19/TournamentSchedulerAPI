@@ -47,7 +47,7 @@ public class TeamJoinService : ServiceBase, ITeamJoinService
         _attempts = attempts;
     }
 
-    private sealed record FoundTeam(int TeamId, string TeamName, int TournamentId, string TournamentName, Sport Sport);
+    private sealed record FoundTeam(int TeamId, string TeamName, int TournamentId, string TournamentName, Sport Sport, bool AlreadyIn = false);
 
     public async Task<ServiceResult<JoinTeamPreviewDto>> PreviewAsync(JoinTeamPreviewRequest request)
     {
@@ -55,7 +55,7 @@ public class TeamJoinService : ServiceBase, ITeamJoinService
         if (error is { } e) return e;
 
         var places = await _players.ListAsync(
-            p => p.TeamId == team!.TeamId && p.UserId == null && p.EmailId == null && p.PhoneNumber == null,
+            p => p.TeamId == team!.TeamId && p.UserId == null && p.EmailId == null && p.PhoneNumber == null && p.LeftOn == null,
             q => PlayerQueries.WithCricketProfile(q).OrderBy(p => p.Name).ThenBy(p => p.JerseyNumber),
             tracking: false);
 
@@ -72,17 +72,29 @@ public class TeamJoinService : ServiceBase, ITeamJoinService
 
     public async Task<ServiceResult<JoinTeamResult>> JoinAsync(JoinTeamRequest request)
     {
-        var (team, error) = await FindOpenTeam(request.Code);
+        var (team, error) = await FindOpenTeam(request.Code, request.Link);
         if (error is { } e) return e;
 
         var user = await _users.GetByIdAsync(_currentUser.UserId);
         if (user == null) return NotFound("Account not found.");
 
+        // An invite link opened again by someone already in this team: nothing to do, the apps just open it.
+        if (team!.AlreadyIn)
+        {
+            var mine = await _players.FirstOrDefaultAsync(p => p.TeamId == team.TeamId && p.UserId == user.UserId, tracking: false);
+            return Success(new JoinTeamResult
+            {
+                TournamentId = team.TournamentId, TournamentName = team.TournamentName, Sport = team.Sport,
+                TeamId = team.TeamId, TeamName = team.TeamName, PlayerId = mine?.Id ?? 0, AlreadyIn = true
+            });
+        }
+
         Player place;
-        if (request.PlayerId is { } playerId)
+        // A link joins straight in as new (the user's choice, 2026-11-23): an admin removes a duplicate name by hand.
+        if (request.PlayerId is { } playerId && !request.Link)
         {
             // Names the organiser gave an email or number are waiting for that person, so they can't be picked here.
-            var picked = await _players.FirstOrDefaultAsync(p => p.Id == playerId && p.TeamId == team!.TeamId, PlayerQueries.WithCricketProfile);
+            var picked = await _players.FirstOrDefaultAsync(p => p.Id == playerId && p.TeamId == team!.TeamId && p.LeftOn == null, PlayerQueries.WithCricketProfile);
             if (picked == null) return NotFound("That name isn't in this team any more. Pick again.");
             if (picked.UserId != null || picked.EmailId != null || picked.PhoneNumber != null) return Conflict("Someone else has just claimed that name. Pick again.");
             place = picked;
@@ -114,15 +126,18 @@ public class TeamJoinService : ServiceBase, ITeamJoinService
         });
     }
 
-    /// <summary>The code's team, if it can be joined by this person now.</summary>
-    private async Task<(FoundTeam? Team, ServiceError? Error)> FindOpenTeam(string? typed)
+    /// <summary>
+    /// The code's team, if it can be joined by this person now. From an invite link a dead code says so in a link's
+    /// words, and being in this very team already isn't an error (<see cref="FoundTeam.AlreadyIn"/>).
+    /// </summary>
+    private async Task<(FoundTeam? Team, ServiceError? Error)> FindOpenTeam(string? typed, bool link = false)
     {
         var me = _currentUser.UserId;
         if (_attempts.WaitFor(me) is { } wait)
             return (null, TooManyRequests($"Too many wrong codes. Try again in {Math.Max(1, (int)Math.Ceiling(wait.TotalMinutes))} minutes."));
 
         var code = JoinCodes.Normalise(typed);
-        if (code == null) return (null, BadRequest($"A team code is {JoinCodes.Length} letters and numbers."));
+        if (code == null) return (null, link ? NotFound(InviteLinks.NoLongerWorks) : BadRequest($"A team code is {JoinCodes.Length} letters and numbers."));
 
         var team = await _teams.QueryFirstOrDefaultAsync(q => q
             .Where(t => t.JoinCode == code)
@@ -130,16 +145,20 @@ public class TeamJoinService : ServiceBase, ITeamJoinService
         if (team == null)
         {
             _attempts.Missed(me);
-            return (null, NotFound("No team has that code. Check it with the organiser."));
+            return (null, NotFound(link ? InviteLinks.NoLongerWorks : "No team has that code. Check it with the organiser."));
         }
 
         if (team.Status is TournamentStatus.Completed or TournamentStatus.Cancelled)
-            return (null, Conflict($"{team.TournamentName} is over, so its teams can't be joined."));
+            return (null, Conflict(link ? InviteLinks.TournamentOver(team.TournamentName) : $"{team.TournamentName} is over, so its teams can't be joined."));
 
         if (await _links.TeamAlreadyInAsync(team.TournamentId, me) is { } already)
+        {
+            if (link && already == team.Name)
+                return (new FoundTeam(team.Id, team.Name, team.TournamentId, team.TournamentName, team.Sport, AlreadyIn: true), null);
             return (null, Conflict(already == team.Name
                 ? $"You're already in {already}."
                 : $"You're already in {already} in this tournament. Leave that team first."));
+        }
 
         return (new FoundTeam(team.Id, team.Name, team.TournamentId, team.TournamentName, team.Sport), null);
     }

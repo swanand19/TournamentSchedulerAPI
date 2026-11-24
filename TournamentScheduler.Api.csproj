@@ -15,6 +15,10 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.9" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <!-- Not used directly: Microsoft.Data.SqlClient 6.1.1 (via EF Core) asks for 9.0.4, which has two .NET
+         denial-of-service advisories (CVE-2026-84008, CVE-2026-70162; fixed in 10.0.13). Drop this once
+         SqlClient itself asks for a fixed version. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
   </ItemGroup>
 
   <ItemGroup>

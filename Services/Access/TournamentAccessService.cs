@@ -51,6 +51,15 @@ public interface ITournamentContext
 
     /// <summary>They follow it while it is public (6E): enough to view it, nothing more.</summary>
     bool IsFollower { get; }
+
+    /// <summary>They're in its player pool or bid for one of its teams (2026-11-17): enough to view it and bid.</summary>
+    bool IsInAuction { get; }
+
+    /// <summary>The teams they run here as a team admin (2026-11-20): enough to view it and change those squads.</summary>
+    IReadOnlyCollection<int> AdminOfTeamIds { get; }
+
+    /// <summary>May change this team's squad: an owner, or one of its admins.</summary>
+    bool CanManageTeam(int teamId);
 }
 
 public sealed class TournamentContext : ITournamentContext
@@ -64,10 +73,16 @@ public sealed class TournamentContext : ITournamentContext
     public PlayerPlace? MyPlace { get; private set; }
     public IScoredMatch? Match { get; private set; }
     public bool IsFollower { get; private set; }
+    public bool IsInAuction { get; private set; }
+    public IReadOnlyCollection<int> AdminOfTeamIds { get; private set; } = [];
+    public bool CanManageTeam(int teamId) => IsOwner || AdminOfTeamIds.Contains(teamId);
 
-    public void Set(int tournamentId, TournamentStatus status, TournamentMemberRole? role, bool isCreator, PlayerPlace? myPlace, IScoredMatch? match, bool isFollower = false)
+    public void Set(int tournamentId, TournamentStatus status, TournamentMemberRole? role, bool isCreator, PlayerPlace? myPlace, IScoredMatch? match, bool isFollower = false,
+        bool isInAuction = false, IReadOnlyCollection<int>? adminOfTeamIds = null)
     {
         IsResolved = true;
+        AdminOfTeamIds = adminOfTeamIds ?? [];
+        IsInAuction = isInAuction;
         IsFollower = isFollower;
         MyPlace = myPlace;
         TournamentId = tournamentId;
@@ -94,7 +109,8 @@ public interface ITournamentAccessService
     /// May the signed-in user do <paramref name="permission"/> on the tournament <paramref name="scope"/>
     /// and <paramref name="id"/> point at? Fills <see cref="ITournamentContext"/> on the way.
     /// </summary>
-    Task<AccessOutcome> CheckAsync(TournamentScope scope, int id, string? sport, TournamentPermission permission, bool ignoresScorerLock);
+    /// <remarks><paramref name="teamId"/> is the route's team, for <see cref="TournamentPermission.ManageTeam"/>.</remarks>
+    Task<AccessOutcome> CheckAsync(TournamentScope scope, int id, string? sport, TournamentPermission permission, bool ignoresScorerLock, int? teamId = null);
 
     /// <summary>After an action succeeded: the first person to score a match takes its lock, and the holder's activity keeps it fresh.</summary>
     Task AfterSuccessAsync(TournamentPermission permission);
@@ -112,7 +128,7 @@ public interface ITournamentAccessService
 /// <item>Not a member and not playing in it → 404 as well: a stranger can't even learn a private tournament exists.
 /// Following a public tournament (6E) lets someone view it while it stays public.</item>
 /// <item>The role decides: View any member or player, Score owners and scorers, Edit and
-/// ManageMembers owners, Delete only the creator.</item>
+/// ManageMembers owners, ManageTeam owners and that team's admins, Delete only the creator.</item>
 /// <item>A completed or cancelled tournament can't be changed; a match already in play can still be finished.</item>
 /// <item>The scorer lock: while someone else is scoring a match, nobody else may score it.</item>
 /// </list>
@@ -136,6 +152,11 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
     private readonly IDataService<Player> _players;
     private readonly IDataService<User> _users;
     private readonly IDataService<TournamentFollow> _follows;
+    private readonly IDataService<Models.Auctions.PoolPlayer> _pool;
+    private readonly IDataService<Models.Auctions.AuctionTeam> _bidders;
+    private readonly IDataService<TeamAdmin> _teamAdmins;
+    private readonly IDataService<Models.Clubs.ClubAdmin> _clubAdmins;
+    private readonly IDataService<Team> _teams;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly TournamentContext _context;
@@ -150,12 +171,22 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
         IDataService<Player> players,
         IDataService<User> users,
         IDataService<TournamentFollow> follows,
+        IDataService<Models.Auctions.PoolPlayer> pool,
+        IDataService<Models.Auctions.AuctionTeam> bidders,
+        IDataService<TeamAdmin> teamAdmins,
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         TournamentContext context,
-        TimeProvider clock)
+        TimeProvider clock,
+        IDataService<Models.Clubs.ClubAdmin> clubAdmins,
+        IDataService<Team> teams)
     {
+        _clubAdmins = clubAdmins;
+        _teams = teams;
         _follows = follows;
+        _pool = pool;
+        _bidders = bidders;
+        _teamAdmins = teamAdmins;
         _tournaments = tournaments;
         _members = members;
         _matches = matches;
@@ -171,7 +202,7 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
-    public async Task<AccessOutcome> CheckAsync(TournamentScope scope, int id, string? sport, TournamentPermission permission, bool ignoresScorerLock)
+    public async Task<AccessOutcome> CheckAsync(TournamentScope scope, int id, string? sport, TournamentPermission permission, bool ignoresScorerLock, int? teamId = null)
     {
         // 1. Which tournament (and match).
         IScoredMatch? match = null;
@@ -217,9 +248,22 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
             .Select(p => new PlayerPlace(p.Id, p.TeamId)), tracking: false);
         // Following counts only while it stays public: switching it off shuts followers out at once.
         var follows = tournament.IsPublic && await _follows.AnyAsync(f => f.TournamentId == tournamentId && f.UserId == userId);
-        if (role == null && !isCreator && place == null && !follows) return new AccessOutcome(404, notFound);
+        // In the player pool, or bidding for a team (2026-11-17): they follow the auction, so they may look.
+        var inAuction = role == null && !isCreator && place == null
+                        && (await _pool.AnyAsync(p => p.TournamentId == tournamentId && p.UserId == userId)
+                            || await _bidders.AnyAsync(b => b.TournamentId == tournamentId && b.BidderUserId == userId));
+        // Running a team here (2026-11-20) is enough to see it: named its admin, or an admin of the lasting team it belongs to.
+        var adminOf = await _teamAdmins.QueryAsync(q => q
+            .Where(a => a.TournamentId == tournamentId && a.UserId == userId && !a.IsDisabled)
+            .Select(a => a.TeamId), tracking: false);
+        var myClubs = await _clubAdmins.QueryAsync(q => q.Where(a => a.UserId == userId && !a.IsDisabled).Select(a => a.ClubId), tracking: false);
+        if (myClubs.Count > 0)
+            adminOf = adminOf.Concat(await _teams.QueryAsync(q => q
+                .Where(t => t.TournamentId == tournamentId && t.ClubId != null && myClubs.Contains(t.ClubId.Value))
+                .Select(t => t.Id), tracking: false)).Distinct().ToList();
+        if (role == null && !isCreator && place == null && !follows && !inAuction && adminOf.Count == 0) return new AccessOutcome(404, notFound);
 
-        _context.Set(tournamentId.Value, tournament.Status, role, isCreator, place, match, follows);
+        _context.Set(tournamentId.Value, tournament.Status, role, isCreator, place, match, follows, inAuction, adminOf);
 
         // 3. The role. Someone who only plays in it may look, nothing more.
         var allowed = permission switch
@@ -228,6 +272,8 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
             TournamentPermission.Score => _context.Role != null,
             TournamentPermission.Edit or TournamentPermission.ManageMembers => _context.IsOwner,
             TournamentPermission.Delete => isCreator,
+            // A team admin runs that one team only; a route without a team is for owners.
+            TournamentPermission.ManageTeam => _context.IsOwner || teamId is { } team && _context.CanManageTeam(team),
             _ => false
         };
         if (!allowed)
@@ -236,6 +282,7 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
             {
                 TournamentPermission.Delete => "Only the person who created this tournament can delete it.",
                 TournamentPermission.Score => "Only the tournament's owners and scorers can do that.",
+                TournamentPermission.ManageTeam => "Only the tournament's owners and this team's admins can do that.",
                 _ => "Only the tournament's owners can do that."
             });
         }
@@ -243,7 +290,7 @@ public class TournamentAccessService : ServiceBase, ITournamentAccessService
         // 4. Completed or cancelled: frozen, except to finish a match already in play.
         var closed = tournament.Status is TournamentStatus.Completed or TournamentStatus.Cancelled;
         var state = tournament.Status == TournamentStatus.Cancelled ? "cancelled" : "completed";
-        if (closed && permission == TournamentPermission.Edit)
+        if (closed && permission is TournamentPermission.Edit or TournamentPermission.ManageTeam)
             return new AccessOutcome(409, $"This tournament is {state}, so it can't be changed.");
         if (closed && permission == TournamentPermission.Score && match is not { IsInPlay: true })
             return new AccessOutcome(409, $"This tournament is {state}, so no more matches can be played.");

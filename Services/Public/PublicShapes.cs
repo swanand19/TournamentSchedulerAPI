@@ -16,11 +16,13 @@ public static class PublicShapes
     /// <summary>Property names (camelCase, as sent) never shown publicly.</summary>
     public static readonly IReadOnlySet<string> Hidden = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "email", "emailId", "phone", "phoneNumber", "userId", "isMe", "isLinked",
+        "email", "emailId", "phone", "phoneNumber", "userId", "isMe", "isLinked", "photoUrl",
         "joinCode", "visibleJoinCode", "publicCode", "share",
-        "access", "scoring", "actions", "canOpen", "canEdit",
+        "access", "scoring", "actions", "canOpen", "canEdit", "admins", "canManage", "canManageAdmins", "canKeep",
         "activeScorer", "activeScorerUserId", "scorerLastSeenAt", "scoringRequestedByUserId", "scoringRequestedAt",
-        "createdByUserId", "completedByUserId", "crd", "crdBy", "lmd", "lmdBy", "myPlayerId", "myTeamId", "myRoles"
+        "createdByUserId", "completedByUserId", "crd", "crdBy", "lmd", "lmdBy", "myPlayerId", "myTeamId", "myRoles",
+        // The auction and the draw on the hall's TV (plan 4.7): who runs it, who bids and the caller's own part stay private.
+        "me", "auctioneer", "drawer", "bidder", "bidderIsCaptain", "captainPlayerId", "captainWithoutAccount", "startProblem", "startWarning"
     };
 
     // As the API writes JSON (Program.cs): camelCase, enums as words, cycles skipped.

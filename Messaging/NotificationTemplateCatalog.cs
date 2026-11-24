@@ -43,8 +43,8 @@ public static partial class NotificationTemplateCatalog
     public const int PushTitleMax = 100;
     public const int PushBodyMax = 500;
 
-    private const string Sign = "Tournament Scheduler";
-    private const string OpenTheApp = "Open Tournament Scheduler to see it.";
+    private const string Sign = "KickCricket";
+    private const string OpenTheApp = "Open KickCricket to see it.";
 
     [GeneratedRegex(@"\{\{\s*([A-Za-z]+)\s*\}\}")]
     private static partial Regex PlaceholderPattern();
@@ -59,6 +59,9 @@ public static partial class NotificationTemplateCatalog
     private static readonly TemplatePlaceholder Role = new("Role", "\"an owner\" or \"a scorer\"", "a scorer");
     private static readonly TemplatePlaceholder ContactKind = new("ContactKind", "\"email\" or \"number\"", "email");
     private static readonly TemplatePlaceholder Team = new("TeamName", "The team", "Lions");
+    private static readonly TemplatePlaceholder PlayerName = new("PlayerName", "The player", "Rohan Gokhale");
+    private static readonly TemplatePlaceholder PlayerNames = new("PlayerNames", "Who is playing, \"Rohan Gokhale\" or \"Neha Joshi and Rohit Sawant\"", "Rohan Gokhale");
+    private static readonly TemplatePlaceholder IsAre = new("IsAre", "\"is\" for one player, \"are\" for more", "is");
     private static readonly TemplatePlaceholder EndsWhen = new("EndsWhen", "\"ends today\" or \"ended yesterday\"", "ends today");
     private static readonly TemplatePlaceholder ClosesWhen = new("ClosesWhen", "\"at the end of tomorrow\" or \"at midnight tonight\"", "at the end of tomorrow");
 
@@ -68,19 +71,19 @@ public static partial class NotificationTemplateCatalog
     [
         CodeTemplate(NotificationTemplateCode.SignInCode, "Sign-in code",
             "The code someone types to sign up or sign in (the app, the website and the admin portal).",
-            "{{Code}} is your Tournament Scheduler code",
+            "{{Code}} is your KickCricket code",
             "Your sign-in code is {{Code}}\n\nIt works for {{ValidMinutes}} minutes. If you didn't ask for it, you can ignore this email —\nnobody can sign in without the code.",
-            "{{Code}} is your Tournament Scheduler sign-in code. It works for {{ValidMinutes}} minutes. Don't share it with anyone."),
+            "{{Code}} is your KickCricket sign-in code. It works for {{ValidMinutes}} minutes. Don't share it with anyone."),
         CodeTemplate(NotificationTemplateCode.AddContactCode, "Code to add an email or number",
             "Sent to an email or mobile number someone adds to their account, to prove it's theirs.",
-            "{{Code}} is your code to add this email to Tournament Scheduler",
+            "{{Code}} is your code to add this email to KickCricket",
             "Your code to add this email to your account is {{Code}}\n\nIt works for {{ValidMinutes}} minutes. If you didn't ask for it, you can ignore this email —\nnothing changes without the code.",
-            "{{Code}} is your code to add this number to Tournament Scheduler. It works for {{ValidMinutes}} minutes."),
+            "{{Code}} is your code to add this number to KickCricket. It works for {{ValidMinutes}} minutes."),
         CodeTemplate(NotificationTemplateCode.DeleteAccountCode, "Code to delete an account",
             "Sent when someone asks to delete their account.",
-            "{{Code}} is your code to delete your Tournament Scheduler account",
+            "{{Code}} is your code to delete your KickCricket account",
             "Your code to delete your account is {{Code}}\n\nIt works for {{ValidMinutes}} minutes. Deleting can't be undone. If you didn't ask for it,\ndon't share the code with anyone, and sign out of all devices from the Account screen.",
-            "{{Code}} is your code to delete your Tournament Scheduler account. It works for {{ValidMinutes}} minutes. Deleting can't be undone."),
+            "{{Code}} is your code to delete your KickCricket account. It works for {{ValidMinutes}} minutes. Deleting can't be undone."),
 
         new(NotificationTemplateCode.TournamentInvite, "Tournament invite", "Invites",
             "Sent when an owner adds an owner or scorer by an email or number that has no account yet.",
@@ -97,13 +100,13 @@ public static partial class NotificationTemplateCatalog
             new NotificationTemplate
             {
                 IsEmail = true,
-                EmailSubject = "{{InviterName}} invited you to {{TournamentName}} on Tournament Scheduler",
-                EmailBody = "{{InviterName}} has added you as {{Role}} of {{TournamentName}}, a {{Sport}} tournament on Tournament Scheduler.\n\n"
+                EmailSubject = "{{InviterName}} invited you to {{TournamentName}} on KickCricket",
+                EmailBody = "{{InviterName}} has added you as {{Role}} of {{TournamentName}}, a {{Sport}} tournament on KickCricket.\n\n"
                             + "To join, open the app (or the website) and sign in with this email address, {{Contact}}. You'll\n"
                             + "get a one-time code by email — there's no password. You'll be {{Role}} as soon as you've signed in.\n\n"
                             + "The invite works until {{ExpiresOn}}. If you weren't expecting it, you can ignore this email.\n\n" + Sign,
                 IsSms = true,
-                SmsBody = "{{InviterName}} invited you to {{RoleAction}} {{TournamentName}} ({{Sport}}) on Tournament Scheduler. "
+                SmsBody = "{{InviterName}} invited you to {{RoleAction}} {{TournamentName}} ({{Sport}}) on KickCricket. "
                           + "Sign in to the app with this number to join. The invite works until {{ExpiresOn}}."
             }),
 
@@ -144,6 +147,10 @@ public static partial class NotificationTemplateCatalog
             "To the owner who sent an invite, when it's taken up.", [new("PersonName", "Who joined", "Ravi Kumar"), Tournament, ContactKind, Role],
             "{{PersonName}} joined {{TournamentName}}",
             "They signed in with the {{ContactKind}} you invited, and they're {{Role}} now."),
+        Notice(NotificationTemplateCode.MadeTeamAdmin, NotificationKind.AddedToTournament, "Made a team admin", "People and teams",
+            "To someone an owner names to run a team's squad.", [Actor, Team, Tournament],
+            "{{ActorName}} made you an admin of {{TeamName}}",
+            "In {{TournamentName}}. You can add and remove its players and choose its captain now."),
         Notice(NotificationTemplateCode.AddedToTeam, NotificationKind.LinkedToTeam, "Added to a team", "People and teams",
             "To someone whose account an owner gives a squad place (by their email or number).", [Actor, Team, Tournament],
             "{{ActorName}} added you to {{TeamName}}",
@@ -172,7 +179,87 @@ public static partial class NotificationTemplateCatalog
             "To the owners from 8 a.m. on the end date of a tournament that hasn't started.", [Tournament, EndsWhen, ClosesWhen],
             "{{TournamentName}} {{EndsWhen}}",
             "It hasn't started. Start it, or move its dates in People & settings — otherwise it's cancelled {{ClosesWhen}}.",
-            email: true)
+            email: true),
+
+        Notice(NotificationTemplateCode.AuctionStarted, NotificationKind.Auction, "Auction started", "Auctions",
+            "To the players in the pool and the teams' bidders when the auctioneer starts the player auction.",
+            [Tournament, new("YourPart", "\"You bid for Lions.\" or what a pool player should do", "You bid for Lions.")],
+            "The auction for {{TournamentName}} has started",
+            "{{YourPart}} Open the tournament to follow it live."),
+        Notice(NotificationTemplateCode.AuctionBought, NotificationKind.Auction, "Bought at the auction", "Auctions",
+            "To a player in the pool when a team buys them.", [Team, new("Price", "What they went for, with the unit", "1,250 pts"), Tournament],
+            "You were bought by {{TeamName}}",
+            "For {{Price}}, in {{TournamentName}}'s auction. You'll be in their squad once the organiser confirms the teams."),
+
+        Notice(NotificationTemplateCode.DrawStarted, NotificationKind.Draw, "Team draw started", "Auctions",
+            "To the players in the pool, the teams' players, the owners and the scorers when the team draw starts (not a quick draw).",
+            [Tournament, new("YourPart", "What a pool player or anyone else should do", "You're in the pool: watch which team you're drawn for.")],
+            "The team draw for {{TournamentName}} has started",
+            "{{YourPart}} Open the tournament to watch it live."),
+        Notice(NotificationTemplateCode.DrawPicked, NotificationKind.Draw, "Drawn for a team", "Auctions",
+            "To a player in the pool when their name lands in a team in the draw.", [Team, Tournament],
+            "You were drawn for {{TeamName}}",
+            "In {{TournamentName}}'s team draw. You'll be in their squad once the organiser confirms the teams."),
+        Notice(NotificationTemplateCode.AuctionBidderReplaced, NotificationKind.Auction, "No longer bidding", "Auctions",
+            "To a team's bidder when the auctioneer replaces them during the auction (a phone that died, for example).",
+            [Team, Tournament, new("NewBidder", "Who bids for the team now", "the auctioneer, from the room")],
+            "You no longer bid for {{TeamName}}",
+            "In {{TournamentName}}'s auction, {{NewBidder}} bids for {{TeamName}} now. You can still watch it live."),
+        Notice(NotificationTemplateCode.AuctionBidderNow, NotificationKind.Auction, "Now bidding", "Auctions",
+            "To the new bidder when the auctioneer replaces a team's bidder during the auction.",
+            [Team, Tournament],
+            "You bid for {{TeamName}} now",
+            "In {{TournamentName}}'s auction. Open the tournament to bid when the auction resumes."),
+
+        // Lasting teams (2026-11-20). People only ever read "team" (C-21), so TeamName holds the lasting team's name.
+        Notice(NotificationTemplateCode.AddedToClub, NotificationKind.Club, "Added to a lasting team", "Teams",
+            "To someone a team's admin adds to the team by their email or number (or whose team was kept with them in it).",
+            [Actor, Team],
+            "{{ActorName}} added you to {{TeamName}}",
+            "It's on your Teams tab now. When {{TeamName}} enters a tournament, you can be in its squad."),
+        Notice(NotificationTemplateCode.MadeClubAdmin, NotificationKind.Club, "Made a lasting team's admin", "Teams",
+            "To someone made an admin of a lasting team.", [Actor, Team],
+            "{{ActorName}} made you an admin of {{TeamName}}",
+            "You can change its players and admins now, and enter it into tournaments."),
+        Notice(NotificationTemplateCode.KeepTeam, NotificationKind.Club, "Keep the team?", "Teams",
+            "To a team's admins when its tournament is completed, if the team isn't kept yet. Once per team.", [Team, Tournament],
+            "Keep {{TeamName}} for your next tournament?",
+            "{{TournamentName}} is over. Keep {{TeamName}} and the same players come along when you enter another tournament."),
+        Notice(NotificationTemplateCode.EntryRequested, NotificationKind.Club, "A team asks to enter", "Teams",
+            "To a tournament's owners when a lasting team's admin sends an entry with the tournament's entry code.", [Actor, Team, Tournament],
+            "{{TeamName}} asks to enter {{TournamentName}}",
+            "{{ActorName}} sent the entry. Open the tournament's teams to see the squad, then accept or decline it."),
+        Notice(NotificationTemplateCode.EntryAccepted, NotificationKind.Club, "Entry accepted", "Teams",
+            "To a lasting team's admins when the organiser accepts its entry.", [Team, Tournament],
+            "{{TeamName}} is in {{TournamentName}}",
+            "The organiser accepted the entry. The squad is in the tournament now, and you can change it there."),
+        Notice(NotificationTemplateCode.EntryDeclined, NotificationKind.Club, "Entry declined", "Teams",
+            "To a lasting team's admins when the organiser declines its entry.", [Team, Tournament],
+            "{{TournamentName}} declined {{TeamName}}'s entry",
+            "The organiser didn't take the entry this time."),
+        Notice(NotificationTemplateCode.EntryCancelled, NotificationKind.Club, "Entries closed", "Teams",
+            "To a lasting team's admins when a tournament's entries close before the organiser answered its entry.", [Team, Tournament],
+            "Entries to {{TournamentName}} have closed",
+            "The organiser made the schedule before answering {{TeamName}}'s entry, so it was cancelled. Ask them if there's still room."),
+        Notice(NotificationTemplateCode.ClubPlayerJoined, NotificationKind.Club, "A player joined", "Teams",
+            "To a lasting team's admins when someone joins it with its code.", [PlayerName, Team],
+            "{{PlayerName}} joined {{TeamName}}",
+            "They're in the squads of tournaments still to come. Tap to choose whether they play in the ones being played now."),
+        Notice(NotificationTemplateCode.Followed, NotificationKind.Social, "A new follower", "Social",
+            "To someone when another person follows them.", [Actor],
+            "{{ActorName}} started following you",
+            "Tap to see their profile, and follow back if you like."),
+        Notice(NotificationTemplateCode.FollowedPlaying, NotificationKind.Social, "Someone you follow is playing", "Social",
+            "To followers when a match they can watch starts with someone they follow in it (at set-up in cricket, at kick-off in football).",
+            [PlayerNames, IsAre, MatchName, Tournament],
+            "{{PlayerNames}} {{IsAre}} playing",
+            "{{Match}} · {{TournamentName}}"),
+
+        // Leagues (2026-11-24).
+        Notice(NotificationTemplateCode.MadeLeagueOrganiser, NotificationKind.League, "Made a league's organiser", "Leagues",
+            "To someone made one of a league's organisers.", [Actor, new("LeagueName", "The league", "Corporate Premier League")],
+            "{{ActorName}} made you an organiser of {{LeagueName}}",
+            "You can start its next season, tick earlier tournaments in as seasons, and change the league.")
     ];
 
     private static readonly Dictionary<NotificationTemplateCode, TemplateDefinition> ByCode = All.ToDictionary(d => d.Code);
