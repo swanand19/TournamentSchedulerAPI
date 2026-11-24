@@ -191,6 +191,7 @@ public class CricketMatchQueryService : ServiceBase, ICricketMatchQueryService
                     b.LegByes,
                     b.PenaltyRuns,
                     b.IsFreeHit,
+                    b.BetweenBalls,
                     b.TotalRuns,
                     WicketType = b.WicketType?.ToString(),
                     b.DismissedPlayerId,

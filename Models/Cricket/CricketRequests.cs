@@ -67,6 +67,13 @@ public class RecordBallRequest
 
     /// <summary>Whether the batters passed each other — only consulted on a catch.</summary>
     public bool BattersCrossed { get; set; }
+
+    /// <summary>
+    /// Retirements only. False: the batter retired between deliveries, so nothing was bowled (no
+    /// ball, no runs). True or left out: the retirement is written onto this delivery, which counts
+    /// as usual — what apps from before 2026-11-24 always did.
+    /// </summary>
+    public bool? CountsAsBall { get; set; }
 }
 
 /// <summary>Overs lost to rain or delay, taken off the innings being played.</summary>
@@ -94,8 +101,9 @@ public class NewBowlerRequest
 
 public class EndInningsRequest
 {
-    /// <summary>Only <see cref="InningsEndReason.Declared"/> and
-    /// <see cref="InningsEndReason.Abandoned"/> are accepted; the rest the engine decides itself.</summary>
+    /// <summary><see cref="InningsEndReason.Declared"/> and <see cref="InningsEndReason.Abandoned"/>,
+    /// and <see cref="InningsEndReason.AllOut"/> only when the batters left retired hurt and can't
+    /// come back (<c>actions.canEndInningsNoBatters</c>); the rest the engine decides itself.</summary>
     public InningsEndReason Reason { get; set; } = InningsEndReason.Declared;
 }
 

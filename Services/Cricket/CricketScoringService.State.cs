@@ -137,7 +137,7 @@ public partial class CricketScoringService
             PlayerId = id,
             PlayerName = NameOf(match, id),
             Runs = faced.Sum(b => b.RunsOffBat),
-            BallsFaced = faced.Count(b => !b.IsWide),
+            BallsFaced = faced.Count(b => b.IsBallFaced),
             Fours = faced.Count(b => b.IsFour),
             Sixes = faced.Count(b => b.IsSix),
             OnStrike = onStrike
@@ -163,22 +163,33 @@ public partial class CricketScoringService
         };
     }
 
-    /// <summary>The over written out the way a scorer writes it: 1 · 4 · wd · W · 2 · nb1.</summary>
+    /// <summary>
+    /// The over written out the way a scorer writes it: 1 · 4 · wd · W · 2 · nb+2. A no-ball says
+    /// where its runs came from — "nb+2" off the bat, "nb 2b" byes, "nb 1lb" leg byes — because
+    /// "nb2" read the same for all three and only the first is the batter's.
+    /// </summary>
     internal static BallSummary ToBallSummary(CricketBall ball)
     {
         string display;
         if (ball.IsWide)
             display = ball.WideExtraRuns > 0 ? $"wd{ball.WideExtraRuns}" : "wd";
         else if (ball.IsNoBall)
-        {
-            var off = ball.RunsOffBat + ball.Byes + ball.LegByes;
-            display = off > 0 ? $"nb{off}" : "nb";
-        }
+            display = ball.RunsOffBat > 0 ? $"nb+{ball.RunsOffBat}"
+                : ball.Byes > 0 ? $"nb {ball.Byes}b"
+                : ball.LegByes > 0 ? $"nb {ball.LegByes}lb"
+                : "nb";
         else if (ball.Byes > 0) display = $"{ball.Byes}b";
         else if (ball.LegByes > 0) display = $"{ball.LegByes}lb";
         else display = ball.RunsOffBat.ToString();
 
-        if (ball.CountsAsWicket) display = display is "0" ? "W" : $"{display}+W";
+        // A retirement is written as RH / RO (it was invisible as a plain "0" before), alone when it
+        // came between balls and after the ball's runs when it was written onto one.
+        if (ball.WicketType is { } how && DismissalRules.IsRetirement(how))
+        {
+            var mark = how == DismissalType.RetiredHurt ? "RH" : "RO";
+            display = !ball.IsDelivery || display is "0" ? mark : $"{display}+{mark}";
+        }
+        else if (ball.CountsAsWicket) display = display is "0" ? "W" : $"{display}+W";
 
         return new BallSummary
         {
@@ -188,8 +199,9 @@ public partial class CricketScoringService
             Runs = ball.TotalRuns,
             IsWicket = ball.CountsAsWicket,
             IsBoundary = ball.IsFour || ball.IsSix,
-            IsExtra = !ball.IsLegalDelivery || ball.Byes > 0 || ball.LegByes > 0 || ball.PenaltyRuns > 0,
-            IsFreeHit = ball.IsFreeHit
+            IsExtra = ball.IsDelivery && (!ball.IsLegalDelivery || ball.Byes > 0 || ball.LegByes > 0 || ball.PenaltyRuns > 0),
+            IsFreeHit = ball.IsFreeHit,
+            NotABall = !ball.IsDelivery
         };
     }
 
@@ -239,6 +251,9 @@ public partial class CricketScoringService
                 .ThenBy(p => p.PlayerName)
                 .Select(ToMember)
                 .ToList();
+            var away = RetiredHurtNotBack(innings);
+            actions.RetiredHurtBatterIds = actions.AvailableBatters.Where(b => away.Contains(b.PlayerId)).Select(b => b.PlayerId).ToList();
+            actions.CanEndInningsNoBatters = OnlyRetiredHurtLeft(match, innings);
 
             actions.AvailableBowlers = match.Squad
                 .Where(p => p.TeamId == innings.BowlingTeamId
@@ -276,9 +291,19 @@ public partial class CricketScoringService
                     .ToList();
             }
 
-            actions.PossibleDismissals = Enum.GetValues<DismissalType>()
+            // Timed out happens between balls, where a free hit doesn't apply; never off a wide or a no-ball.
+            var possible = Enum.GetValues<DismissalType>()
                 .Where(d => d != DismissalType.LBW || match.Rules.LbwEnabled)
-                .Where(d => !innings.FreeHitPending || DismissalRules.PossibleOnFreeHit(d))
+                .Where(d => !innings.FreeHitPending || DismissalRules.PossibleOnFreeHit(d)
+                            || DismissalRules.HappensBetweenBalls(d))
+                .ToList();
+            actions.PossibleDismissals = possible.Select(d => d.ToString()).ToList();
+            actions.PossibleDismissalsOffWide = possible
+                .Where(d => DismissalRules.PossibleOffWide(d) && !DismissalRules.HappensBetweenBalls(d))
+                .Select(d => d.ToString())
+                .ToList();
+            actions.PossibleDismissalsOffNoBall = possible
+                .Where(d => DismissalRules.PossibleOffNoBall(d) && !DismissalRules.HappensBetweenBalls(d))
                 .Select(d => d.ToString())
                 .ToList();
         }

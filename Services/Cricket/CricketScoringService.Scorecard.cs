@@ -95,11 +95,14 @@ public partial class CricketScoringService
         }
 
         var rows = new List<BattingCardRow>();
+        var away = RetiredHurtNotBack(innings);
 
         foreach (var playerId in arrival)
         {
             var faced = balls.Where(b => b.StrikerId == playerId).ToList();
             var dismissal = balls.LastOrDefault(b => b.DismissedPlayerId == playerId);
+            // Retired hurt, then came back: that departure is over, so they're batting (or not out).
+            if (dismissal is { CountsAsWicket: false } && !away.Contains(playerId)) dismissal = null;
 
             rows.Add(new BattingCardRow
             {
@@ -108,7 +111,7 @@ public partial class CricketScoringService
                 Position = rows.Count + 1,
                 Runs = faced.Sum(b => b.RunsOffBat),
                 // A wide is not a ball faced; a no-ball is.
-                BallsFaced = faced.Count(b => !b.IsWide),
+                BallsFaced = faced.Count(b => b.IsBallFaced),
                 Fours = faced.Count(b => b.IsFour),
                 Sixes = faced.Count(b => b.IsSix),
                 IsOut = dismissal?.CountsAsWicket ?? false,
@@ -232,7 +235,10 @@ public partial class CricketScoringService
         return falls;
     }
 
-    /// <summary>What the pair currently in has put on, measured from the last wicket to fall.</summary>
+    /// <summary>
+    /// What the pair currently in has put on, from the last departure — a retirement hurt included,
+    /// since it brings a new pair, as the stats page's partnerships already count it.
+    /// </summary>
     private static (int Runs, int Balls) CurrentPartnership(List<CricketBall> balls)
     {
         var runs = 0;
@@ -240,7 +246,7 @@ public partial class CricketScoringService
 
         foreach (var ball in balls)
         {
-            if (ball.CountsAsWicket)
+            if (ball.DismissedPlayerId.HasValue)
             {
                 runs = 0;
                 faced = 0;
@@ -248,7 +254,7 @@ public partial class CricketScoringService
             }
 
             runs += ball.TotalRuns;
-            if (!ball.IsWide) faced++;
+            if (ball.IsBallFaced) faced++;
         }
 
         return (runs, faced);

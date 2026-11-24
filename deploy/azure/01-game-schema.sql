@@ -7,7 +7,7 @@
 -- script generated from the new migrations only (see README.md, "Database changes").
 --
 -- The fresh database gets the two roles and the System user from the migrations; the message wording is
--- added by the API the first time it needs it, permissions at start-up. None of deploy/sql/01-24 are needed here:
+-- added by the API the first time it needs it, permissions at start-up. None of deploy/sql/01-25 are needed here:
 -- those upgraded the laptop's existing data.
 --
 -- Generated from the EF migrations - don't edit by hand; regenerate with
@@ -3479,6 +3479,27 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261124060334_AddLeagues', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124104004_RetireBetweenBalls'
+)
+BEGIN
+    ALTER TABLE [CricketBalls] ADD [BetweenBalls] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261124104004_RetireBetweenBalls'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261124104004_RetireBetweenBalls', N'10.0.9');
 END;
 
 COMMIT;

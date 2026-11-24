@@ -27,7 +27,13 @@ public partial class CricketScoringService
         if (request.Reason == InningsEndReason.Declared && !match.Rules.IsMultiInnings)
             return CricketResult<CricketMatch>.Fail("An innings can only be declared in a multi-innings match.");
 
-        if (request.Reason is not (InningsEndReason.Declared or InningsEndReason.Abandoned))
+        // All out is the engine's to call, except when the only batters left retired hurt and can't
+        // come back: then the scorer says so, and nobody being left to bat ends it.
+        if (request.Reason == InningsEndReason.AllOut && !OnlyRetiredHurtLeft(match, innings))
+            return CricketResult<CricketMatch>.Fail(
+                "The innings ends by itself when the last wicket falls. Ending it early is only for when the batters left retired hurt and can't come back.");
+
+        if (request.Reason is not (InningsEndReason.Declared or InningsEndReason.Abandoned or InningsEndReason.AllOut))
             return CricketResult<CricketMatch>.Fail("Only a declaration or an abandonment is the scorer's to call.");
 
         CloseInnings(match, innings, request.Reason);

@@ -87,14 +87,31 @@ public class CricketBall
     /// </summary>
     public bool BattersCrossed { get; set; }
 
+    /// <summary>
+    /// A batter retired while the ball was dead (Law 25.4), so nothing was bowled. The row is in the
+    /// ledger only so the fold sends the batter off: it is no ball for the bowler or the batter,
+    /// carries no runs, and leaves the over and any free hit where they were. Only a retirement can
+    /// be recorded this way; the scorer chooses, because in casual cricket a retirement is often
+    /// written onto the ball it happened on.
+    /// </summary>
+    public bool BetweenBalls { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     // --- Derived ------------------------------------------------------
     // Computed here, the way Match exposes its flow state, so the engine, the scorecard and the
     // client never each write their own version of the arithmetic.
 
+    /// <summary>Something was bowled: every row but a retirement between balls.</summary>
     [NotMapped]
-    public bool IsLegalDelivery => !IsWide && !IsNoBall;
+    public bool IsDelivery => !BetweenBalls;
+
+    [NotMapped]
+    public bool IsLegalDelivery => IsDelivery && !IsWide && !IsNoBall;
+
+    /// <summary>A ball faced by the striker: a no-ball is one, a wide and a retirement between balls aren't.</summary>
+    [NotMapped]
+    public bool IsBallFaced => IsDelivery && !IsWide;
 
     [NotMapped]
     public int WideRuns => IsWide ? WidePenalty + WideExtraRuns : 0;

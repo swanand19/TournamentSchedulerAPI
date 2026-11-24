@@ -419,6 +419,7 @@ public partial class CricketScoringService : ICricketScoringService
             return CricketResult<CricketMatch>.Fail(error);
 
         var legalSoFar = innings.LegalBalls;
+        var betweenBalls = IsBetweenBalls(request);
         var ball = new CricketBall
         {
             InningsId = innings.Id,
@@ -437,7 +438,9 @@ public partial class CricketScoringService : ICricketScoringService
             PenaltyRuns = request.PenaltyRuns,
             WidePenalty = match.Rules.WidePenaltyRuns,
             NoBallPenalty = match.Rules.NoBallPenaltyRuns,
-            IsFreeHit = innings.FreeHitPending,
+            // Nothing bowled between balls, so it wasn't a free hit; the next delivery still is.
+            IsFreeHit = innings.FreeHitPending && !betweenBalls,
+            BetweenBalls = betweenBalls,
             WicketType = request.WicketType,
             DismissedPlayerId = request.WicketType.HasValue
                 ? request.DismissedPlayerId ?? innings.StrikerId
@@ -457,6 +460,14 @@ public partial class CricketScoringService : ICricketScoringService
         await _unitOfWork.SaveChangesAsync();
         return CricketResult<CricketMatch>.Success(match);
     }
+
+    /// <summary>
+    /// Nothing is bowled: a retirement the scorer says came between balls, or a batter timed out,
+    /// which never happens on a delivery (the server decides that one, whatever the app sent).
+    /// </summary>
+    private static bool IsBetweenBalls(RecordBallRequest request) =>
+        request.CountsAsBall == false
+        || request.WicketType is { } how && DismissalRules.HappensBetweenBalls(how);
 
     /// <summary>
     /// Everything the laws — and this league's variations on them — forbid. Each check exists
@@ -491,23 +502,42 @@ public partial class CricketScoringService : ICricketScoringService
         if (request.Byes > 0 && request.LegByes > 0)
             return "A delivery is either byes or leg byes, not both.";
 
+        var betweenBalls = IsBetweenBalls(request);
+        if (betweenBalls)
+        {
+            if (request.WicketType is not { } departure
+                || !(DismissalRules.IsRetirement(departure) || DismissalRules.HappensBetweenBalls(departure)))
+                return "Only a retirement or a batter timed out can happen between balls. Anything else is recorded on the ball it happened on.";
+
+            if (request.IsWide || request.IsNoBall || request.RunsOffBat > 0 || request.WideExtraRuns > 0
+                || request.Byes > 0 || request.LegByes > 0 || request.PenaltyRuns > 0)
+                return request.WicketType == DismissalType.TimedOut
+                    ? "A batter is timed out before facing, so nothing is bowled: no runs or extras. Record the timed out on its own."
+                    : "Nothing is bowled when a batter retires between balls, so there are no runs or extras. Record the ball first, then the retirement.";
+        }
+
         if (request.WicketType is not { } wicket) return null;
+        var how = DismissalRules.Describe(wicket);
 
         if (wicket == DismissalType.LBW && !rules.LbwEnabled)
             return "LBW is not played in this match.";
 
         if (request.IsWide && !DismissalRules.PossibleOffWide(wicket))
-            return $"{wicket} is not possible off a wide.";
+            return $"{how} is not possible off a wide.";
 
-        if (innings.FreeHitPending && !DismissalRules.PossibleOnFreeHit(wicket))
-            return $"{wicket} is not possible on a free hit.";
+        if (request.IsNoBall && !DismissalRules.PossibleOffNoBall(wicket))
+            return $"{how} is not possible off a no-ball. Only run out, obstructing the field, hitting the ball twice or a retirement can happen off one.";
+
+        // Between balls nothing is bowled, so the free hit is still to come.
+        if (!betweenBalls && innings.FreeHitPending && !DismissalRules.PossibleOnFreeHit(wicket))
+            return $"{how} is not possible on a free hit.";
 
         var dismissed = request.DismissedPlayerId ?? innings.StrikerId;
         if (dismissed != innings.StrikerId && dismissed != innings.NonStrikerId)
             return "The dismissed player is not at the crease.";
 
         if (dismissed != innings.StrikerId && !DismissalRules.CanDismissNonStriker(wicket))
-            return "Only the striker can be out that way. The non-striker can only be run out, obstruct the field or retire.";
+            return "Only the striker can be out that way. The non-striker can only be run out, obstruct the field, retire or be timed out.";
 
         if (wicket == DismissalType.RunOut && request.DismissedPlayerId is null)
             return "A run-out must say which batter was dismissed.";
@@ -517,7 +547,7 @@ public partial class CricketScoringService : ICricketScoringService
 
         if (DismissalRules.TakesFielder(wicket) && request.FielderId is null
             && wicket != DismissalType.RunOut)
-            return $"{wicket} needs the fielder who took it.";
+            return $"{how} needs the fielder who took it.";
 
         if (wicket == DismissalType.RunOut)
         {
@@ -618,8 +648,10 @@ public partial class CricketScoringService : ICricketScoringService
                 currentBowler = null;
             }
 
-            // Neither a wide nor a no-ball consumes a free hit; only a legal delivery does.
-            freeHit = ball.IsNoBall ? rules.FreeHitAfterNoBall || freeHit
+            // Neither a wide nor a no-ball consumes a free hit; only a legal delivery does. A
+            // retirement between balls bowls nothing, so it leaves the free hit for the next ball.
+            freeHit = !ball.IsDelivery ? freeHit
+                : ball.IsNoBall ? rules.FreeHitAfterNoBall || freeHit
                 : ball.IsWide ? rules.FreeHitAfterWide || freeHit
                 : false;
         }
@@ -717,6 +749,45 @@ public partial class CricketScoringService : ICricketScoringService
     /// </summary>
     private static bool IsOut(CricketInnings innings, int playerId) =>
         innings.Balls.Any(b => b.DismissedPlayerId == playerId && b.CountsAsWicket);
+
+    /// <summary>
+    /// Batters who retired hurt and haven't come back. They may still resume (Law 25.4.2), so they
+    /// stay on the list of who can come in next — and once nobody else is left, the scorer may close
+    /// the innings for a batter who can't return.
+    /// </summary>
+    internal static HashSet<int> RetiredHurtNotBack(CricketInnings innings)
+    {
+        var away = new HashSet<int>();
+        foreach (var ball in innings.Balls.OrderBy(b => b.SequenceNumber))
+        {
+            away.Remove(ball.StrikerId);
+            if (ball.NonStrikerId is int partner) away.Remove(partner);
+            if (ball.WicketType == DismissalType.RetiredHurt && ball.DismissedPlayerId is int hurt) away.Add(hurt);
+        }
+        if (innings.StrikerId is int striker) away.Remove(striker);
+        if (innings.NonStrikerId is int nonStriker) away.Remove(nonStriker);
+        return away;
+    }
+
+    /// <summary>
+    /// A batter is needed and the only ones who could come are retired hurt. If they can't come back
+    /// the side has nobody left to bat, which ends the innings as all out (Law 25.4.2 records them as
+    /// "retired hurt", not out) even though fewer wickets have fallen.
+    /// </summary>
+    internal static bool OnlyRetiredHurtLeft(CricketMatch match, CricketInnings innings)
+    {
+        if (innings.Status != InningsStatus.InProgress || !innings.NeedsBatter) return false;
+        var away = RetiredHurtNotBack(innings);
+        var waiting = match.Squad
+            .Where(p => p.TeamId == innings.BattingTeamId
+                        && p.SquadStatus == CricketSquadStatus.Playing
+                        && p.PlayerId != innings.StrikerId
+                        && p.PlayerId != innings.NonStrikerId
+                        && !IsOut(innings, p.PlayerId))
+            .Select(p => p.PlayerId)
+            .ToList();
+        return waiting.Count > 0 && waiting.All(away.Contains);
+    }
 
     public async Task<CricketResult<CricketMatch>> SetBowlerAsync(int matchId, NewBowlerRequest request)
     {

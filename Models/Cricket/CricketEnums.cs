@@ -246,10 +246,11 @@ public static class DismissalRules
 
     /// <summary>
     /// Most dismissals only befall the batter facing. A run-out or obstruction can take either,
-    /// and either batter can retire.
+    /// either batter can retire, and the new batter may be timed out at either end.
     /// </summary>
     public static bool CanDismissNonStriker(DismissalType type) => type switch
     {
+        DismissalType.TimedOut => true,
         DismissalType.RunOut => true,
         DismissalType.ObstructingTheField => true,
         DismissalType.RetiredHurt => true,
@@ -261,9 +262,17 @@ public static class DismissalRules
     public static bool CountsAsWicket(DismissalType type) => type != DismissalType.RetiredHurt;
 
     /// <summary>
-    /// The ball is not in play in the usual sense on a wide, so only these can happen off one.
+    /// Leaving the field, hurt or not (Law 25.4). The only departure the ball has nothing to do with,
+    /// so it may happen off any delivery or between two of them.
     /// </summary>
-    public static bool PossibleOffWide(DismissalType type) => type switch
+    public static bool IsRetirement(DismissalType type) =>
+        type is DismissalType.RetiredHurt or DismissalType.RetiredOut;
+
+    /// <summary>
+    /// The ball is not in play in the usual sense on a wide, so only these can happen off one — and
+    /// a retirement, which the ball doesn't cause.
+    /// </summary>
+    public static bool PossibleOffWide(DismissalType type) => IsRetirement(type) || type switch
     {
         DismissalType.Stumped => true,
         DismissalType.RunOut => true,
@@ -272,8 +281,47 @@ public static class DismissalRules
         _ => false
     };
 
-    /// <summary>A free hit protects the batter from everything the bowler could earn.</summary>
-    public static bool PossibleOnFreeHit(DismissalType type) => type switch
+    /// <summary>
+    /// Off a no-ball the bowler can't take a wicket and neither can the keeper (Law 21.18): only the
+    /// ways out that have nothing to do with the delivery remain, and a retirement.
+    /// </summary>
+    public static bool PossibleOffNoBall(DismissalType type) => IsRetirement(type) || type switch
+    {
+        DismissalType.RunOut => true,
+        DismissalType.ObstructingTheField => true,
+        DismissalType.HitBallTwice => true,
+        _ => false
+    };
+
+    /// <summary>
+    /// The incoming batter not ready in time (Law 40). Nothing has been bowled to them, so it is
+    /// always recorded between balls, never on a delivery.
+    /// </summary>
+    public static bool HappensBetweenBalls(DismissalType type) => type == DismissalType.TimedOut;
+
+    /// <summary>The name a scorer would say, for messages: "Caught and bowled", not "CaughtAndBowled".</summary>
+    public static string Describe(DismissalType type) => type switch
+    {
+        DismissalType.Bowled => "Bowled",
+        DismissalType.Caught => "Caught",
+        DismissalType.CaughtAndBowled => "Caught and bowled",
+        DismissalType.LBW => "LBW",
+        DismissalType.RunOut => "Run out",
+        DismissalType.Stumped => "Stumped",
+        DismissalType.HitWicket => "Hit wicket",
+        DismissalType.RetiredHurt => "Retired hurt",
+        DismissalType.RetiredOut => "Retired out",
+        DismissalType.ObstructingTheField => "Obstructing the field",
+        DismissalType.HitBallTwice => "Hit the ball twice",
+        DismissalType.TimedOut => "Timed out",
+        _ => type.ToString()
+    };
+
+    /// <summary>
+    /// A free hit protects the batter from everything the bowler could earn. It can't stop a batter
+    /// from retiring.
+    /// </summary>
+    public static bool PossibleOnFreeHit(DismissalType type) => IsRetirement(type) || type switch
     {
         DismissalType.RunOut => true,
         DismissalType.Stumped => true,

@@ -159,7 +159,7 @@ public class BallSummary
     public int SequenceNumber { get; set; }
     public int OverNumber { get; set; }
 
-    /// <summary>"4", "W", "wd", "nb2", "1b" — the over as a scorer would write it out.</summary>
+    /// <summary>"4", "W", "wd", "nb+2", "nb 1lb", "1b" — the over as a scorer would write it out.</summary>
     public string Display { get; set; } = string.Empty;
 
     public int Runs { get; set; }
@@ -167,6 +167,9 @@ public class BallSummary
     public bool IsBoundary { get; set; }
     public bool IsExtra { get; set; }
     public bool IsFreeHit { get; set; }
+
+    /// <summary>A retirement or a timed out between balls ("RH" / "RO" / "W"): shown in the over, but nothing was bowled.</summary>
+    public bool NotABall { get; set; }
 }
 
 public class InningsLiveState
@@ -236,11 +239,29 @@ public class CricketActions
     /// <summary>Batters who may walk out next: in the XI, not at the crease, not already out.</summary>
     public List<CricketSquadMember> AvailableBatters { get; set; } = new();
 
+    /// <summary>Of <see cref="AvailableBatters"/>, those who retired hurt and would be coming back.</summary>
+    public List<int> RetiredHurtBatterIds { get; set; } = new();
+
+    /// <summary>
+    /// A batter is needed and only retired-hurt ones are left: if they can't come back, the scorer
+    /// may end the innings (<c>innings/end</c> with reason AllOut).
+    /// </summary>
+    public bool CanEndInningsNoBatters { get; set; }
+
     /// <summary>Bowlers who may take the next over: not the last one, and not at their limit.</summary>
     public List<CricketSquadMember> AvailableBowlers { get; set; } = new();
 
-    /// <summary>Dismissals that are possible off the very next delivery, given the rules in force.</summary>
+    /// <summary>
+    /// Dismissals that are possible off the very next delivery, given the rules in force (and
+    /// TimedOut, which is always recorded between balls).
+    /// </summary>
     public List<string> PossibleDismissals { get; set; } = new();
+
+    /// <summary>Of those, the ones possible if the delivery is a wide (stumped, run out, hit wicket…).</summary>
+    public List<string> PossibleDismissalsOffWide { get; set; } = new();
+
+    /// <summary>Of those, the ones possible off a no-ball: run out, obstructing, hit twice, retirements.</summary>
+    public List<string> PossibleDismissalsOffNoBall { get; set; } = new();
 
     /// <summary>
     /// Corrections (a player picked by mistake): the batters at the crease may be swapped for anyone in

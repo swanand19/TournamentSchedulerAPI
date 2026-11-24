@@ -569,7 +569,7 @@ public class CricketStatsService : ICricketStatsService
                 b.Balls += row.BallsFaced;
                 b.Fours += row.Fours;
                 b.Sixes += row.Sixes;
-                b.Dots += balls.Count(x => x.StrikerId == row.PlayerId && !x.IsWide && x.RunsOffBat == 0);
+                b.Dots += balls.Count(x => x.StrikerId == row.PlayerId && x.IsBallFaced && x.RunsOffBat == 0);
 
                 if (row.Runs >= 100) b.Hundreds++;
                 else if (row.Runs >= 50) b.Fifties++;
@@ -685,7 +685,7 @@ public class CricketStatsService : ICricketStatsService
                 a = ball.StrikerId;
                 b = ball.NonStrikerId;
                 runs += ball.TotalRuns;
-                if (!ball.IsWide) faced++;
+                if (ball.IsBallFaced) faced++;
 
                 if (ball.DismissedPlayerId.HasValue)
                 {

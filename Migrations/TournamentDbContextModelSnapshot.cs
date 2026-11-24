@@ -1310,6 +1310,9 @@ namespace TournamentScheduler.Api.Migrations
                     b.Property<bool>("BattersCrossed")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("BetweenBalls")
+                        .HasColumnType("bit");
+
                     b.Property<int>("BowlerId")
                         .HasColumnType("int");
 

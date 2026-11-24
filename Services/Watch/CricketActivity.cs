@@ -112,15 +112,36 @@ internal static class CricketActivity
             }
         }
 
+        /// <summary>A retirement or a timed out between balls: nothing bowled, so a note rather than "X to Y, …".</summary>
+        private void NothingBowled(CricketBall ball)
+        {
+            if (ball.DismissedPlayerId is not int who) return;
+            var b = BatterOf(who);
+            if (ball.CountsAsWicket) _wickets++;
+            _partnershipRuns = 0;
+            _partnershipBalls = 0;
+            feed.Add(ball.CountsAsWicket ? ActivityKind.Wicket : ActivityKind.Note,
+                $"{Name(who)} {CricketScoringService.DescribeDismissal(match, ball)} {b.Runs} ({b.Balls})",
+                detail: "Between balls",
+                chip: CricketScoringService.ToBallSummary(ball).Display,
+                teamId: innings.BattingTeamId, innings: innings.InningsNumber);
+        }
+
         private void Ball(CricketBall ball)
         {
+            if (!ball.IsDelivery)
+            {
+                NothingBowled(ball);
+                return;
+            }
+
             var striker = BatterOf(ball.StrikerId);
             var bowler = BowlerOf(ball.BowlerId);
             var runsBefore = striker.Runs;
             var teamBefore = _runs;
             var partnershipBefore = _partnershipRuns;
 
-            if (!ball.IsWide)
+            if (ball.IsBallFaced)
             {
                 striker.Balls++;
                 striker.Runs += ball.RunsOffBat;
@@ -152,7 +173,8 @@ internal static class CricketActivity
 
             Milestones(ball, striker, runsBefore, teamBefore, partnershipBefore);
 
-            if (ball.CountsAsWicket)
+            // Any departure, a retirement included, brings a new pair.
+            if (ball.DismissedPlayerId.HasValue)
             {
                 _partnershipRuns = 0;
                 _partnershipBalls = 0;
