@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.Extensions.Options;
 using TournamentScheduler.Api.Auth;
 using TournamentScheduler.Api.Data;
@@ -343,6 +343,12 @@ public class TournamentMemberService : ServiceBase, ITournamentMemberService
             await _messages.SendAsync(InviteMessages.Build(template, invite, _currentUser.Name, tournament!.Name, tournament.Sport));
             return true;
         }
+        catch (WhatsAppTemplateMissingException e)
+        {
+            // Expected until Meta approves the invite's template: not an error, nothing was sent to Meta.
+            _logger.LogWarning("Couldn't send a tournament invite: {Reason}", e.Message);
+            return false;
+        }
         catch (Exception e)
         {
             _logger.LogError(e, "Couldn't send a tournament invite.");
@@ -391,7 +397,8 @@ public static class InviteMessages
             ("ExpiresOn", invite.ExpiresAt.ToString("d MMM yyyy", CultureInfo.InvariantCulture)));
 
         if (invite.Channel == OtpChannel.Sms)
-            return new OutgoingMessage(OtpChannel.Sms, invite.Target, "", TemplateText.Sms(template, values), MessageDispatcher.InviteKind, values);
+            return new OutgoingMessage(OtpChannel.Sms, invite.Target, "", TemplateText.Sms(template, values), MessageDispatcher.InviteKind,
+                WhatsAppTemplateMessage.From(template, values));
 
         var mail = TemplateText.Email(template, values);
         return new OutgoingMessage(OtpChannel.Email, invite.Target, mail.Title, mail.Body, MessageDispatcher.InviteKind);

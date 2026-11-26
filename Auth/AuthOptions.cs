@@ -1,4 +1,4 @@
-namespace TournamentScheduler.Api.Auth;
+﻿namespace TournamentScheduler.Api.Auth;
 
 /// <summary>The <c>Auth</c> section of appsettings: how long sessions last and how codes are sent.</summary>
 public sealed class AuthOptions
@@ -149,10 +149,10 @@ public enum SmsProvider
 }
 
 /// <summary>
-/// The <c>WhatsApp</c> section, used when <c>Sms:Provider</c> is <c>WhatsApp</c>. Meta only lets a
-/// business start a conversation with a template it has approved, so each kind of message names
-/// its template here, and the wording lives at Meta (Messaging/WhatsApp.md has the texts to submit).
-/// The access token belongs in the server's own appsettings or user secrets, never in the repo.
+/// The <c>WhatsApp</c> section, used when <c>Sms:Provider</c> is <c>WhatsApp</c>: only how to reach
+/// Meta, which differs per server (laptop, Azure). Which approved template each message goes out as
+/// is content, kept on the message's own template row and edited in the admin portal (2026-11-26).
+/// The access token belongs in Key Vault, user secrets or the server's own appsettings, never in the repo.
 /// </summary>
 public sealed class WhatsAppOptions
 {
@@ -166,29 +166,6 @@ public sealed class WhatsAppOptions
 
     /// <summary>A system user's permanent token with whatsapp_business_messaging.</summary>
     public string? AccessToken { get; set; }
-
-    /// <summary>The language every template was approved in.</summary>
-    public string Language { get; set; } = "en";
-
-    /// <summary>
-    /// The authentication template every code uses — sign-in, adding a number, deleting the account.
-    /// Meta fixes its wording ("123456 is your verification code."), so one serves all three.
-    /// </summary>
-    public string CodeTemplate { get; set; } = "sign_in_code";
-
-    /// <summary>The utility template for an invite to own or score a tournament.</summary>
-    public string InviteTemplate { get; set; } = "tournament_invite";
-
-    /// <summary>
-    /// The invite's placeholders in the order of the template's {{1}}, {{2}}, … — names from the
-    /// TournamentInvite template (InviterName, Role, TournamentName, Sport, RoleAction, ExpiresOn).
-    /// Empty means <see cref="DefaultInviteParameters"/> (a default here would be added to, not replaced, by the binder).
-    /// </summary>
-    public string[]? InviteParameters { get; set; }
-
-    public static readonly string[] DefaultInviteParameters = ["InviterName", "Role", "TournamentName", "ExpiresOn"];
-
-    public IReadOnlyList<string> InviteOrder => InviteParameters is { Length: > 0 } p ? p : DefaultInviteParameters;
 
     public int TimeoutSeconds { get; set; } = 15;
 

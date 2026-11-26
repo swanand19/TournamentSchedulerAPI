@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using TournamentScheduler.Api.Messaging;
 using TournamentScheduler.Api.Models.Accounts;
 using TournamentScheduler.Api.Models.Messaging;
@@ -80,14 +80,21 @@ public sealed class SmtpOtpSender(SmtpMailer mailer, NotificationTemplateStore t
 }
 
 /// <summary>
-/// A code on WhatsApp, through the one authentication template (<c>WhatsApp:CodeTemplate</c>). Its
-/// wording is Meta's, not the portal's: the code goes in the body and again in the copy-code
-/// button. RemoteLogs gets "&lt;code&gt;" in its place.
+/// A code on WhatsApp, as the authentication template named on the code's template row (the admin
+/// portal; one approved template can serve all three code messages). Its wording is Meta's, not the
+/// portal's: the code goes in the body and again in the copy-code button. RemoteLogs gets
+/// "&lt;code&gt;" in its place.
 /// </summary>
-public sealed class WhatsAppOtpSender(WhatsAppClient whatsApp, IOptions<WhatsAppOptions> options) : IOtpSender
+public sealed class WhatsAppOtpSender(WhatsAppClient whatsApp, NotificationTemplateStore templates) : IOtpSender
 {
-    public Task SendAsync(OtpMessage message, CancellationToken cancellationToken = default) =>
-        whatsApp.SendTemplateAsync(message.To, options.Value.CodeTemplate, [message.Code], message.Code, ["<code>"], cancellationToken);
+    public async Task SendAsync(OtpMessage message, CancellationToken cancellationToken = default)
+    {
+        var row = await templates.GetAsync(message.TemplateCode, cancellationToken);
+        // The rules keep a code row's template; a row broken in SQL falls back to the built-in one in the store.
+        var template = WhatsAppTemplateMessage.From(row, message.Values(message.Code))
+                       ?? throw new WhatsAppTemplateMissingException(message.What);
+        await whatsApp.SendTemplateAsync(message.To, template.Name, template.Language, [message.Code], message.Code, ["<code>"], cancellationToken);
+    }
 }
 
 /// <summary>

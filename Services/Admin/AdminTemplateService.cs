@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using TournamentScheduler.Api.Auth;
 using TournamentScheduler.Api.Data;
 using TournamentScheduler.Api.Data.DataServices;
@@ -25,6 +26,7 @@ public class AdminTemplateService(
     IUnitOfWork unitOfWork,
     NotificationTemplateStore store,
     ICurrentUser currentUser,
+    IOptions<SmsOptions> sms,
     TimeProvider clock) : ServiceBase, IAdminTemplateService
 {
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
@@ -53,9 +55,17 @@ public class AdminTemplateService(
         {
             request.SmsBody = request.SmsDltTemplateId = null;
         }
+
+        // The WhatsApp section left out (an editor that doesn't know it) keeps what the row has, so it
+        // can't be wiped by accident; an empty name or list clears it.
+        var row = await templates.FirstOrDefaultAsync(t => t.Code == code);
+        var current = row ?? NotificationTemplateCatalog.DefaultRow(code);
+        request.WhatsAppTemplateName ??= current.WhatsAppTemplateName;
+        request.WhatsAppLanguage ??= current.WhatsAppLanguage;
+        request.WhatsAppParameters ??= NotificationTemplateCatalog.WhatsAppParametersOf(current.WhatsAppParameters);
+
         if (NotificationTemplateCatalog.Problem(code, request) is { } problem) return BadRequest(problem);
 
-        var row = await templates.FirstOrDefaultAsync(t => t.Code == code);
         var now = Now;
         if (row == null)
         {
@@ -69,6 +79,9 @@ public class AdminTemplateService(
         row.IsSms = request.IsSms;
         row.SmsBody = Clean(request.SmsBody);
         row.SmsDltTemplateId = Clean(request.SmsDltTemplateId);
+        row.WhatsAppTemplateName = Clean(request.WhatsAppTemplateName);
+        row.WhatsAppLanguage = Clean(request.WhatsAppLanguage);
+        row.WhatsAppParameters = NotificationTemplateCatalog.StoredWhatsAppParameters(request.WhatsAppParameters);
         row.IsNotification = request.IsNotification;
         row.NotificationTitle = Clean(request.NotificationTitle);
         row.NotificationBody = Clean(request.NotificationBody);
@@ -119,11 +132,13 @@ public class AdminTemplateService(
             .ToDictionary(u => u.UserId, u => u.Name);
     }
 
-    private static AdminTemplateDto ToDto(TemplateDefinition d, NotificationTemplate? row, Dictionary<int, string> names)
+    private AdminTemplateDto ToDto(TemplateDefinition d, NotificationTemplate? row, Dictionary<int, string> names)
     {
         var t = row ?? d.Default;
         var direct = d.Family == TemplateFamily.Direct;
-        const string ByContact = "Goes by email or text, whichever the person gave — so it can't be switched off.";
+        var code = NotificationTemplateCatalog.IsCodeMessage(d);
+        var provider = sms.Value.Provider;
+        const string ByContact = "Goes by email or to the mobile number, whichever the person gave — so it can't be switched off.";
         var customised = row != null && !NotificationTemplateCatalog.IsDefault(row);
         return new AdminTemplateDto
         {
@@ -134,8 +149,18 @@ public class AdminTemplateService(
             Channels =
             [
                 new() { Channel = TemplateChannel.Email, Supported = true, Locked = direct, Note = direct ? ByContact : null },
+                new() { Channel = TemplateChannel.WhatsApp, Supported = direct, Locked = code,
+                        InUseHere = direct ? provider == SmsProvider.WhatsApp : null,
+                        Note = !direct ? "Notifications don't go on WhatsApp: Meta wants an approved template for each kind of message."
+                            : (code
+                                ? "Codes to mobile numbers go as this approved WhatsApp template, so it can't be emptied. Its wording is Meta's; the code fills it and its Copy code button."
+                                : "Goes as this approved WhatsApp template. Empty: it isn't sent to mobile numbers (an invite is still saved and works when they sign up).")
+                              + (provider == SmsProvider.WhatsApp ? "" : " This server doesn't send numbers by WhatsApp, so it isn't used here.") },
                 new() { Channel = TemplateChannel.Sms, Supported = direct, Locked = direct,
-                        Note = direct ? ByContact + " Texts go to the log until an SMS provider is set up." : "Notifications don't go by text." },
+                        InUseHere = direct ? provider == SmsProvider.Log : null,
+                        Note = direct
+                            ? "The words written to the log instead of sending, when this server's numbers are for testing (Sms:Provider Log). Kept for an SMS provider later; never sent while numbers go by WhatsApp."
+                            : "Notifications don't go to mobile numbers." },
                 new() { Channel = TemplateChannel.Notification, Supported = !direct, Note = direct ? "Codes and invites aren't inbox messages." : null },
                 new() { Channel = TemplateChannel.Push, Supported = !direct,
                         Note = direct ? "Codes and invites aren't push messages." : "Push isn't switched on yet (it needs the app's development build). The words are kept for when it is; empty means the same as the inbox." }
@@ -150,6 +175,9 @@ public class AdminTemplateService(
             IsSms = t.IsSms,
             SmsBody = t.SmsBody,
             SmsDltTemplateId = t.SmsDltTemplateId,
+            WhatsAppTemplateName = t.WhatsAppTemplateName,
+            WhatsAppLanguage = t.WhatsAppLanguage,
+            WhatsAppParameters = NotificationTemplateCatalog.WhatsAppParametersOf(t.WhatsAppParameters),
             IsNotification = t.IsNotification,
             NotificationTitle = t.NotificationTitle,
             NotificationBody = t.NotificationBody,

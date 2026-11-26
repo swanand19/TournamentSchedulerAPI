@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -31,12 +31,13 @@ public sealed class WhatsAppClient(IHttpClientFactory http, IOptions<WhatsAppOpt
     private readonly WhatsAppOptions _options = options.Value;
 
     /// <summary>
-    /// <paramref name="body"/> fills the template's {{1}}, {{2}}, …; <paramref name="button"/> is an
-    /// authentication template's copy-code button, which Meta requires to carry the code again.
-    /// Returns Meta's message id.
+    /// <paramref name="template"/> and <paramref name="language"/> come from the message's template row
+    /// (the admin portal); <paramref name="body"/> fills the template's {{1}}, {{2}}, …;
+    /// <paramref name="button"/> is an authentication template's copy-code button, which Meta requires
+    /// to carry the code again. Returns Meta's message id.
     /// </summary>
     public async Task<string?> SendTemplateAsync(
-        string to, string template, IReadOnlyList<string> body, string? button,
+        string to, string template, string language, IReadOnlyList<string> body, string? button,
         IReadOnlyList<string> logged, CancellationToken cancellationToken = default)
     {
         if (!_options.IsConfigured)
@@ -44,13 +45,13 @@ public sealed class WhatsAppClient(IHttpClientFactory http, IOptions<WhatsAppOpt
 
         var number = WhatsAppNumber(to);
         var url = $"{_options.BaseUrl.TrimEnd('/')}/{_options.ApiVersion}/{_options.PhoneNumberId}/messages";
-        var call = remote.Start("WHATSAPP", "POST", url, new { to = number, template, parameters = logged });
+        var call = remote.Start("WHATSAPP", "POST", url, new { to = number, template, language, parameters = logged });
 
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
-                Content = JsonContent.Create(Payload(number, template, body, button))
+                Content = JsonContent.Create(Payload(number, template, language, body, button))
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.AccessToken);
 
@@ -84,7 +85,7 @@ public sealed class WhatsAppClient(IHttpClientFactory http, IOptions<WhatsAppOpt
     /// <summary>Meta wants the number in international form without the "+": +919876543210 → 919876543210.</summary>
     public static string WhatsAppNumber(string e164) => e164.TrimStart('+');
 
-    private object Payload(string number, string template, IReadOnlyList<string> body, string? button)
+    private static object Payload(string number, string template, string language, IReadOnlyList<string> body, string? button)
     {
         var components = new List<object>();
         if (body.Count > 0)
@@ -98,7 +99,7 @@ public sealed class WhatsAppClient(IHttpClientFactory http, IOptions<WhatsAppOpt
             recipient_type = "individual",
             to = number,
             type = "template",
-            template = new { name = template, language = new { code = _options.Language }, components }
+            template = new { name = template, language = new { code = language }, components }
         };
     }
 

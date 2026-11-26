@@ -1,4 +1,4 @@
-using TournamentScheduler.Api.Models.Accounts;
+﻿using TournamentScheduler.Api.Models.Accounts;
 
 namespace TournamentScheduler.Api.Models.Messaging;
 
@@ -96,6 +96,24 @@ public class NotificationTemplate : AuditedEntity
     /// </summary>
     public string? SmsDltTemplateId { get; set; }
 
+    /// <summary>
+    /// The Meta template this message goes out as when numbers are sent by WhatsApp (<c>Sms:Provider</c>).
+    /// Meta only lets a business start a chat with a template it approved in advance, so the wording lives
+    /// at Meta and this row only points to it. Empty: this message isn't sent on WhatsApp. Like the DLT id
+    /// it's a registration, not wording, so a reset keeps it. Lowercase letters, digits and _ (Meta's rule).
+    /// </summary>
+    public string? WhatsAppTemplateName { get; set; }
+
+    /// <summary>The language the Meta template was approved in, exactly as Meta writes it: <c>en</c> is not <c>en_US</c>.</summary>
+    public string? WhatsAppLanguage { get; set; }
+
+    /// <summary>
+    /// Which of this message's placeholders fill the Meta template's {{1}}, {{2}}, … in order, comma-separated
+    /// ("InviterName,Role,TournamentName,ExpiresOn"). Unused for the code messages: an authentication template
+    /// always takes just the code, in its body and again in its Copy code button.
+    /// </summary>
+    public string? WhatsAppParameters { get; set; }
+
     /// <summary>The in-app inbox.</summary>
     public bool IsNotification { get; set; }
     public string? NotificationTitle { get; set; }
@@ -110,9 +128,12 @@ public class NotificationTemplate : AuditedEntity
 public enum TemplateChannel
 {
     Email,
+    /// <summary>A message to a mobile number in words: what the log writes (testing), or an SMS provider later.</summary>
     Sms,
     Notification,
-    Push
+    Push,
+    /// <summary>A message to a mobile number as an approved Meta template (2026-11-26).</summary>
+    WhatsApp
 }
 
 public class TemplatePlaceholderDto
@@ -137,6 +158,12 @@ public class TemplateChannelDto
     /// <summary>Its switch can't be changed; <see cref="Note"/> says why.</summary>
     public bool Locked { get; set; }
     public string? Note { get; set; }
+
+    /// <summary>
+    /// For the two ways to a mobile number: whether this server sends numbers this way now
+    /// (<c>Sms:Provider</c> — WhatsApp for real, Log for testing). Null for the other channels.
+    /// </summary>
+    public bool? InUseHere { get; set; }
 }
 
 public class AdminTemplateDto
@@ -162,6 +189,9 @@ public class AdminTemplateDto
     public bool IsSms { get; set; }
     public string? SmsBody { get; set; }
     public string? SmsDltTemplateId { get; set; }
+    public string? WhatsAppTemplateName { get; set; }
+    public string? WhatsAppLanguage { get; set; }
+    public List<string> WhatsAppParameters { get; set; } = [];
     public bool IsNotification { get; set; }
     public string? NotificationTitle { get; set; }
     public string? NotificationBody { get; set; }
@@ -170,7 +200,11 @@ public class AdminTemplateDto
     public string? PushBody { get; set; }
 }
 
-/// <summary>The whole template as the portal's editor holds it. Texts on unsupported channels are ignored.</summary>
+/// <summary>
+/// The whole template as the portal's editor holds it. Texts on unsupported channels are ignored. The
+/// WhatsApp fields are left as they are when omitted (null), so an editor that doesn't know them can't
+/// wipe them; an empty name or list clears them.
+/// </summary>
 public class SaveTemplateRequest
 {
     public bool IsEmail { get; set; }
@@ -179,6 +213,9 @@ public class SaveTemplateRequest
     public bool IsSms { get; set; }
     public string? SmsBody { get; set; }
     public string? SmsDltTemplateId { get; set; }
+    public string? WhatsAppTemplateName { get; set; }
+    public string? WhatsAppLanguage { get; set; }
+    public List<string>? WhatsAppParameters { get; set; }
     public bool IsNotification { get; set; }
     public string? NotificationTitle { get; set; }
     public string? NotificationBody { get; set; }

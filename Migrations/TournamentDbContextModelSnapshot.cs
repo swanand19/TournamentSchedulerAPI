@@ -2216,6 +2216,18 @@ namespace TournamentScheduler.Api.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("WhatsAppLanguage")
+                        .HasMaxLength(15)
+                        .HasColumnType("nvarchar(15)");
+
+                    b.Property<string>("WhatsAppParameters")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("WhatsAppTemplateName")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
                     b.HasKey("NotificationTemplateId");
 
                     b.HasIndex("Code")

@@ -274,8 +274,40 @@ public static partial class NotificationTemplateCatalog
                 EmailSubject = subject,
                 EmailBody = body + "\n\n" + Sign,
                 IsSms = true,
-                SmsBody = sms
+                SmsBody = sms,
+                // Meta's wording ("123456 is your verification code."), so one approved template serves all three.
+                WhatsAppTemplateName = CodeWhatsAppTemplate,
+                WhatsAppLanguage = CodeWhatsAppLanguage
             });
+
+    /// <summary>
+    /// The authentication template approved in KickCricket's WhatsApp account (2026-11-25), which a new
+    /// database starts with. Everywhere else the name comes from the row, edited in the portal.
+    /// </summary>
+    public const string CodeWhatsAppTemplate = "otp_template_kickcricket";
+    public const string CodeWhatsAppLanguage = "en";
+
+    public const int WhatsAppNameMax = 512;
+    public const int WhatsAppLanguageMax = 15;
+    public const int WhatsAppParametersMax = 20;
+
+    [GeneratedRegex("^[a-z0-9_]+$")]
+    private static partial Regex WhatsAppNamePattern();
+
+    // Meta's language codes: "en", "en_US", "pt_BR", "zh_CN", …
+    [GeneratedRegex("^[a-z]{2,3}(_[A-Z]{2,4})?$")]
+    private static partial Regex WhatsAppLanguagePattern();
+
+    /// <summary>A code message: its WhatsApp template is an authentication one, which takes only the code.</summary>
+    public static bool IsCodeMessage(TemplateDefinition d) => d.Placeholders.Any(p => p.Required && p.Name == Code.Name);
+
+    /// <summary>The stored "A,B,C" as a list; empty when there are none.</summary>
+    public static List<string> WhatsAppParametersOf(string? stored) =>
+        string.IsNullOrWhiteSpace(stored) ? [] : stored.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+
+    /// <summary>The list as stored, or null when there are none.</summary>
+    public static string? StoredWhatsAppParameters(IReadOnlyCollection<string>? parameters) =>
+        parameters is { Count: > 0 } ? string.Join(",", parameters.Select(p => p.Trim())) : null;
 
     /// <summary>A notification: the inbox on, push on (for when it exists), email only where asked.</summary>
     private static TemplateDefinition Notice(NotificationTemplateCode code, NotificationKind kind, string name, string group, string description,
@@ -299,6 +331,10 @@ public static partial class NotificationTemplateCatalog
         var d = Get(code).Default;
         var row = new NotificationTemplate { Code = code };
         CopyTexts(d, row);
+        // Not in CopyTexts: a reset copies the wording back but keeps what's registered with Meta.
+        row.WhatsAppTemplateName = d.WhatsAppTemplateName;
+        row.WhatsAppLanguage = d.WhatsAppLanguage;
+        row.WhatsAppParameters = d.WhatsAppParameters;
         return row;
     }
 
@@ -372,6 +408,8 @@ public static partial class NotificationTemplateCatalog
         }
         if (t.SmsDltTemplateId is { Length: > 50 })
             return "The DLT template id can be at most 50 characters.";
+        if (WhatsAppProblem(d, t) is { } whatsApp)
+            return whatsApp;
 
         var allowed = d.Placeholders.Select(p => p.Name).ToHashSet();
         foreach (var (label, text, max, needed) in texts)
@@ -394,6 +432,52 @@ public static partial class NotificationTemplateCatalog
                 if (label != "Email subject" && !text.Contains($"{{{{{required.Name}}}}}"))
                     return $"{label} must include {{{{{required.Name}}}}}.";
         }
+        return null;
+    }
+
+    /// <summary>
+    /// The WhatsApp section's rules. A code message must keep its template: with numbers on WhatsApp,
+    /// emptying it would stop everyone signing in by number. Names and languages are checked against
+    /// Meta's own formats, so a typo is refused here rather than by Meta at the next sign-in.
+    /// </summary>
+    private static string? WhatsAppProblem(TemplateDefinition d, SaveTemplateRequest t)
+    {
+        var name = t.WhatsAppTemplateName?.Trim();
+        var language = t.WhatsAppLanguage?.Trim();
+        var parameters = t.WhatsAppParameters ?? [];
+
+        if (d.Family != TemplateFamily.Direct)
+            return string.IsNullOrEmpty(name) && string.IsNullOrEmpty(language) && parameters.Count == 0
+                ? null
+                : "Notifications don't go on WhatsApp: Meta wants an approved template for each kind of message. Use the inbox, email or push.";
+
+        if (string.IsNullOrEmpty(name))
+        {
+            if (IsCodeMessage(d))
+                return "Codes to mobile numbers go on WhatsApp, so this message needs the name of its approved WhatsApp template.";
+            return string.IsNullOrEmpty(language) && parameters.Count == 0
+                ? null
+                : "Give the WhatsApp template's name too, or clear its language and values.";
+        }
+        if (name.Length > WhatsAppNameMax)
+            return $"The WhatsApp template name can be at most {WhatsAppNameMax} characters.";
+        if (!WhatsAppNamePattern().IsMatch(name))
+            return "A WhatsApp template name has only lowercase letters, digits and _ — copy it from WhatsApp Manager.";
+        if (string.IsNullOrEmpty(language))
+            return "Give the language the WhatsApp template was approved in, as Meta writes it (en, en_US, …).";
+        if (language.Length > WhatsAppLanguageMax || !WhatsAppLanguagePattern().IsMatch(language))
+            return $"\"{language}\" isn't a WhatsApp language code. Copy it from WhatsApp Manager: en, en_US, hi, …";
+
+        if (IsCodeMessage(d))
+            return parameters.Count == 0
+                ? null
+                : "A code's WhatsApp template always takes just the code, so it has no values to choose.";
+        if (parameters.Count > WhatsAppParametersMax)
+            return $"A WhatsApp template here can have at most {WhatsAppParametersMax} values.";
+        var allowed = d.Placeholders.Select(p => p.Name).ToHashSet();
+        var unknown = parameters.FirstOrDefault(p => !allowed.Contains(p.Trim()));
+        if (unknown != null)
+            return $"\"{unknown}\" isn't one of this message's values. It can use: {string.Join(", ", d.Placeholders.Select(p => p.Name))}.";
         return null;
     }
 }

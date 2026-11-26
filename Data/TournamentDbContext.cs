@@ -625,6 +625,9 @@ public class TournamentDbContext : DbContext
             e.Property(t => t.EmailBody).HasMaxLength(4000);
             e.Property(t => t.SmsBody).HasMaxLength(1000);
             e.Property(t => t.SmsDltTemplateId).HasMaxLength(50);
+            e.Property(t => t.WhatsAppTemplateName).HasMaxLength(512);
+            e.Property(t => t.WhatsAppLanguage).HasMaxLength(15);
+            e.Property(t => t.WhatsAppParameters).HasMaxLength(500);
             e.Property(t => t.NotificationTitle).HasMaxLength(200);
             e.Property(t => t.NotificationBody).HasMaxLength(1000);
             e.Property(t => t.PushTitle).HasMaxLength(100);

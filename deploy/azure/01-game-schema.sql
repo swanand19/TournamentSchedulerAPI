@@ -1,4 +1,4 @@
--- Production (Azure SQL): every game table, from nothing. Run FIRST, on the new empty database, in SSMS
+﻿-- Production (Azure SQL): every game table, from nothing. Run FIRST, on the new empty database, in SSMS
 -- connected as the server's Microsoft Entra admin (Authentication: "Microsoft Entra MFA"), with the
 -- database itself selected in the toolbar (Azure SQL has no USE). Then 02-log-schema.sql, then
 -- 03-app-identity.sql.
@@ -7,7 +7,7 @@
 -- script generated from the new migrations only (see README.md, "Database changes").
 --
 -- The fresh database gets the two roles and the System user from the migrations; the message wording is
--- added by the API the first time it needs it, permissions at start-up. None of deploy/sql/01-25 are needed here:
+-- added by the API the first time it needs it, permissions at start-up. None of deploy/sql/01-26 are needed here:
 -- those upgraded the laptop's existing data.
 --
 -- Generated from the EF migrations - don't edit by hand; regenerate with
@@ -3500,6 +3500,51 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261124104004_RetireBetweenBalls', N'10.0.9');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261126062907_AddWhatsAppTemplates'
+)
+BEGIN
+    ALTER TABLE [NotificationTemplates] ADD [WhatsAppLanguage] nvarchar(15) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261126062907_AddWhatsAppTemplates'
+)
+BEGIN
+    ALTER TABLE [NotificationTemplates] ADD [WhatsAppParameters] nvarchar(500) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261126062907_AddWhatsAppTemplates'
+)
+BEGIN
+    ALTER TABLE [NotificationTemplates] ADD [WhatsAppTemplateName] nvarchar(512) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261126062907_AddWhatsAppTemplates'
+)
+BEGIN
+    EXEC(N'UPDATE [NotificationTemplates] SET [WhatsAppTemplateName] = N''otp_template_kickcricket'', [WhatsAppLanguage] = N''en'' WHERE [Code] IN (N''SignInCode'', N''AddContactCode'', N''DeleteAccountCode'') AND [WhatsAppTemplateName] IS NULL')
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261126062907_AddWhatsAppTemplates'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261126062907_AddWhatsAppTemplates', N'10.0.9');
 END;
 
 COMMIT;
